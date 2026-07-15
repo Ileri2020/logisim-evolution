@@ -1,4 +1,4 @@
-name: "Windows Build"
+compare this yml file to current yml. name: "Windows Build"
 
 on:
   push:
