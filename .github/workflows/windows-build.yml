@@ -25,7 +25,12 @@ jobs:
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: ${{ env.JDK_DISTRO }}
-          cache: gradle
+
+      - name: Configure Gradle cache directory
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/gradle-cache"
+          echo "GRADLE_USER_HOME=$RUNNER_TEMP/gradle-cache" >> "$GITHUB_ENV"
 
       - name: "Build MSI"
         run: .\gradlew.bat createMsi -x checkstyleMain -x checkstyleTest
