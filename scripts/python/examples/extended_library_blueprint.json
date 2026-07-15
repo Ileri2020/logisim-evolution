@@ -1,0 +1,95 @@
+{
+  "name": "extended_library",
+  "elements": [
+    {
+      "type": "pin",
+      "name": "pin0"
+    },
+    {
+      "type": "probe",
+      "name": "probe0"
+    },
+    {
+      "type": "splitter",
+      "name": "split0"
+    },
+    {
+      "type": "clock",
+      "name": "clk0"
+    },
+    {
+      "type": "constant",
+      "name": "const0"
+    },
+    {
+      "type": "power",
+      "name": "pwr0"
+    },
+    {
+      "type": "ground",
+      "name": "gnd0"
+    },
+    {
+      "type": "gate",
+      "name": "inv0",
+      "gate_type": "not"
+    },
+    {
+      "type": "gate",
+      "name": "and0",
+      "gate_type": "and"
+    },
+    {
+      "type": "multiplexer",
+      "name": "mux0"
+    },
+    {
+      "type": "adder",
+      "name": "add0"
+    },
+    {
+      "type": "counter",
+      "name": "cnt0"
+    },
+    {
+      "type": "ram",
+      "name": "ram0"
+    },
+    {
+      "type": "button",
+      "name": "btn0"
+    },
+    {
+      "type": "led",
+      "name": "led0"
+    },
+    {
+      "type": "dip_switch",
+      "name": "sw0"
+    },
+    {
+      "type": "uart",
+      "name": "uart0"
+    },
+    {
+      "type": "floating_point_adder",
+      "name": "fpadder0"
+    },
+    {
+      "type": "register",
+      "name": "reg0"
+    },
+    {
+      "type": "d_flip_flop",
+      "name": "dff0"
+    },
+    {
+      "type": "ttl_7400",
+      "name": "ttl0"
+    },
+    {
+      "type": "cpu_core",
+      "name": "cpu0"
+    }
+  ]
+}

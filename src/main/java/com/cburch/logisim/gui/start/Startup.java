@@ -31,6 +31,8 @@ import com.cburch.logisim.gui.test.TestBench;
 import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.proj.Project;
 import com.cburch.logisim.proj.ProjectActions;
+import com.cburch.logisim.scripting.PythonCircuitScriptRunner;
+import com.cburch.logisim.scripting.PythonScriptManager;
 import com.cburch.logisim.std.base.BaseLibrary;
 import com.cburch.logisim.std.gates.GatesLibrary;
 import com.cburch.logisim.util.JFileChoosers;
@@ -175,6 +177,8 @@ public class Startup implements AWTEventListener {
   private static final String ARG_TEST_VECTOR_LONG = "test-vector";
   private static final String ARG_NO_SPLASH_LONG = "no-splash";
   private static final String ARG_MAIN_CIRCUIT = "toplevel-circuit";
+  private static final String ARG_PYTHON_SCRIPT_LONG = "python-script";
+  private static final String ARG_PYTHON_SCRIPT_SHORT = "p";
 
   /**
    * Parses provided string expecting it represent boolean option. Accepted values
@@ -339,6 +343,7 @@ public class Startup implements AWTEventListener {
     addOption(opts, "argTemplateOption", ARG_TEMPLATE_LONG, ARG_TEMPLATE_SHORT, 1);
     addOption(opts, "argNoSplashOption", ARG_NO_SPLASH_LONG);
     addOption(opts, "argMainCircuitOption", ARG_MAIN_CIRCUIT, 1);
+    addOption(opts, "argPythonScriptOption", ARG_PYTHON_SCRIPT_LONG, ARG_PYTHON_SCRIPT_SHORT, 1);
     addOption(opts, "argTestVectorOption", ARG_TEST_VECTOR_LONG, ARG_TEST_VECTOR_SHORT, 2);
     addOption(opts, "argTestCircuitOption", ARG_TEST_CIRCUIT_LONG, ARG_TEST_CIRCUIT_SHORT, 1);     // FIXME add "Option" suffix to key name
     addOption(opts, "argTestCircGenOption", ARG_TEST_CIRC_GEN_LONG, ARG_TEST_CIRC_GEN_SHORT, 2);   // FIXME add "Option" suffix to key name
@@ -409,6 +414,7 @@ public class Startup implements AWTEventListener {
         case ARG_TEST_CIRCUIT_LONG -> handleArgTestCircuit(startup, opt);
         case ARG_TEST_CIRC_GEN_LONG -> handleArgTestCircGen(startup, opt);
         case ARG_MAIN_CIRCUIT -> handleArgMainCircuit(startup, opt);
+        case ARG_PYTHON_SCRIPT_LONG -> handleArgPythonScript(startup, opt);
         default -> RC.OK; // should not really happen IRL.
       };
       lastHandlerRc = optHandlerRc;
@@ -678,6 +684,49 @@ public class Startup implements AWTEventListener {
     return RC.OK;
   }
 
+  private static RC handleArgPythonScript(Startup startup, Option opt) {
+    final var scriptFile = new File(opt.getValue());
+    if (!scriptFile.isFile()) {
+      logger.error("Python script not found: {}", scriptFile);
+      return RC.QUIT;
+    }
+
+    // ── Step 1: Try the embedded GraalPy engine first ──────────────────────────
+    // The embedded manager runs Python in-process, giving scripts direct access to
+    // live Logisim objects (logisim.context, logisim.ops) without spawning a child
+    // process – the same model used by Blender's embedded Python scripting.
+    final var embeddedManager = PythonScriptManager.getInstance();
+    if (embeddedManager.isReady()) {
+      final var success = embeddedManager.runFile(scriptFile);
+      if (!success) {
+        logger.error("Embedded Python script execution failed for: {}", scriptFile);
+        return RC.QUIT;
+      }
+      logger.info("Embedded Python script completed: {}", scriptFile.getAbsolutePath());
+      startup.exitAfterStartup = true;
+      return RC.QUIT;
+    }
+
+    // ── Fallback: external process runner (legacy behaviour) ───────────────────
+    // Reached only if GraalPy failed to initialise (e.g., missing native libs).
+    // Outputs a generated_blueprint.json file, same as before.
+    logger.warn("Embedded Python engine unavailable – falling back to external process runner.");
+    try {
+      final var outputFile = new File(scriptFile.getParentFile(), "generated_blueprint.json");
+      final var runner = new PythonCircuitScriptRunner();
+      final var exitCode = runner.runScript(scriptFile, outputFile);
+      if (exitCode != 0) {
+        logger.error("Python script execution failed with exit code {}", exitCode);
+        return RC.QUIT;
+      }
+      System.out.println("Python blueprint written to " + outputFile.getAbsolutePath());
+      startup.exitAfterStartup = true;
+      return RC.QUIT;
+    } catch (Exception e) {
+      logger.error("Failed to run Python script", e);
+      return RC.QUIT;
+    }
+  }
 
   /**
    * Handles 4th argument of `--test-fpga` argument which can be either string literal

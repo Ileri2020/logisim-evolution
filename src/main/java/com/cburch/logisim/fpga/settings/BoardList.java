@@ -69,7 +69,9 @@ public class BoardList {
     try {
       zf = new ZipFile(dir);
     } catch (IOException e) {
-      throw new Error(e);
+      // Return empty list if classpath entry is not a valid zip/jar file,
+      // avoiding crashing the entire application or test runner.
+      return ret;
     }
     final var entries = zf.entries();
     while (entries.hasMoreElements()) {

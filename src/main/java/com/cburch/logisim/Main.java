@@ -10,9 +10,11 @@
 package com.cburch.logisim;
 
 import com.cburch.logisim.generated.BuildInfo;
+import com.cburch.logisim.scripting.PythonScriptManager;
 import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.gui.start.Startup;
 import com.cburch.logisim.prefs.AppPreferences;
+import com.cburch.logisim.scripting.PythonRuntimeManager;
 import com.formdev.flatlaf.FlatDarculaLaf;
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatIntelliJLaf;
@@ -74,6 +76,17 @@ public class Main {
         | InstantiationException e) {
       e.printStackTrace();
     }
+
+    PythonRuntimeManager.get().initialize();
+
+    // Initialize the embedded Python scripting engine (Step 1: Embedded Interpreter).
+    // This starts the GraalPy context so scripts can run in-process with full access
+    // to live Logisim objects, similar to how Blender embeds CPython.
+    final var pythonManager = PythonScriptManager.getInstance();
+    pythonManager.initialize();
+
+    // Register a JVM shutdown hook to cleanly release the GraalPy context.
+    Runtime.getRuntime().addShutdownHook(new Thread(pythonManager::close, "graalpy-shutdown"));
 
     final var startup = Startup.parseArgs(args);
     if (startup == null) System.exit(10);

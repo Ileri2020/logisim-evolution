@@ -44,6 +44,8 @@ import com.cburch.logisim.proj.ProjectActions;
 import com.cburch.logisim.proj.ProjectEvent;
 import com.cburch.logisim.proj.ProjectListener;
 import com.cburch.logisim.proj.Projects;
+import com.cburch.logisim.scripting.PythonConsolePanel;
+import com.cburch.logisim.scripting.PythonContextRegistry;
 import com.cburch.logisim.tools.AddTool;
 import com.cburch.logisim.tools.Tool;
 import com.cburch.logisim.util.HorizontalSplitPane;
@@ -121,6 +123,7 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
   private final JTabbedPane topTab;
   private final JTabbedPane bottomTab;
   private final Toolbox toolbox;
+  private final PythonConsolePanel pythonConsolePanel;
   private final SimulationExplorer simExplorer;
   private final AttrTable attrTable;
   private final ZoomControl zoom;
@@ -209,10 +212,13 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     final var simPanel = new JPanel(new BorderLayout());
     simPanel.add(simExplorer, BorderLayout.CENTER);
 
+    pythonConsolePanel = new PythonConsolePanel(project);
+
     topTab = new JTabbedPane();
     topTab.setFont(new Font(fontName, fontStyle, 9));
     topTab.add(explPanel);
     topTab.add(simPanel);
+    topTab.add(pythonConsolePanel);
 
     final var attrFooter = new JPanel(new BorderLayout());
     attrFooter.add(zoom);
@@ -252,6 +258,7 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     menuListener.register(mainPanel);
     KeyboardToolSelection.register(toolbar);
 
+    PythonContextRegistry.get().bind(project, this);
     project.setFrame(this);
     if (project.getTool() == null) {
       project.setTool(project.getOptions().getToolbarData().getFirstTool());
@@ -718,6 +725,7 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     buildTitleString();
     topTab.setTitleAt(0, S.get("designTab"));
     topTab.setTitleAt(1, S.get("simulateTab"));
+    topTab.setTitleAt(2, S.get("pythonConsoleTab"));
     bottomTab.setTitleAt(0, S.get("propertiesTab"));
     bottomTab.setTitleAt(1, S.get("stateTab"));
   }

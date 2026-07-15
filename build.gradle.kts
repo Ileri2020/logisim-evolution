@@ -47,6 +47,8 @@ dependencies {
   implementation("commons-cli:commons-cli:1.11.0")
   implementation("com.vladsch.flexmark:flexmark-all:0.64.8")
   implementation("org.apache.commons:commons-text:1.15.0")
+  implementation("org.graalvm.polyglot:polyglot:24.1.2")
+  implementation("org.graalvm.polyglot:python:24.1.2")
 
   // NOTE: Be aware of reported issues with Eclipse and Batik
   // See: https://github.com/logisim-evolution/logisim-evolution/issues/709

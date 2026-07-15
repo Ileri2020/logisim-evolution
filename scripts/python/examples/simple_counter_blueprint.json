@@ -1,0 +1,20 @@
+{
+  "name": "simple_counter",
+  "elements": [
+    {
+      "type": "gate",
+      "name": "and0",
+      "gate_type": "and"
+    },
+    {
+      "type": "counter",
+      "name": "cnt0"
+    },
+    {
+      "type": "wire",
+      "name": "w0",
+      "source": "and0.out",
+      "target": "cnt0.in"
+    }
+  ]
+}
