@@ -219,6 +219,11 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     topTab.add(explPanel);
     topTab.add(simPanel);
     topTab.add(pythonConsolePanel);
+    topTab.addChangeListener(e -> {
+      if (topTab.getSelectedComponent() == pythonConsolePanel) {
+        pythonConsolePanel.updatePythonCode(project.getCurrentCircuit());
+      }
+    });
 
     final var attrFooter = new JPanel(new BorderLayout());
     attrFooter.add(zoom);
@@ -708,6 +713,10 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     return vhdlSimulatorConsole;
   }
 
+  public PythonConsolePanel getPythonConsolePanel() {
+    return pythonConsolePanel;
+  }
+
   public ZoomModel getZoomModel() {
     return layoutZoomModel;
   }
@@ -954,6 +963,9 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
       if (event.getAction() == CircuitEvent.ACTION_SET_NAME) {
         buildTitleString();
       }
+      if (pythonConsolePanel != null) {
+        pythonConsolePanel.updatePythonCode(event.getCircuit());
+      }
       // Forward any circuit changes to the embedded Python manager so scripts
       // that define `on_design_update()` are invoked automatically.
       try {
@@ -1005,6 +1017,9 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
             appearance.setCircuit(project, project.getCircuitState());
           }
           viewAttributes(project.getTool());
+          if (pythonConsolePanel != null) {
+            pythonConsolePanel.updatePythonCode(circuit);
+          }
           // Inform embedded scripting manager of the newly selected circuit/project.
           try {
             com.cburch.logisim.scripting.PythonScriptManager.getInstance().setActiveProject(project);

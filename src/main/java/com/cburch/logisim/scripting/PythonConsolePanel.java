@@ -33,6 +33,7 @@ public class PythonConsolePanel extends JPanel {
   public PythonConsolePanel(Project project) {
     this.project = project;
     buildUi();
+    initializeScriptFile();
   }
 
   private void buildUi() {
@@ -179,5 +180,85 @@ public class PythonConsolePanel extends JPanel {
       return null;
     }
     return resolvePath(pathText).toFile();
+  }
+
+  private void initializeScriptFile() {
+    final var mainFile = project.getLogisimFile().getLoader().getMainFile();
+    if (mainFile == null) {
+      try {
+        final var documentsDir = new File(System.getProperty("user.home"), "Documents");
+        if (!documentsDir.exists()) {
+          documentsDir.mkdirs();
+        }
+        var pyFile = new File(documentsDir, "untitled.py");
+        int counter = 1;
+        while (pyFile.exists()) {
+          pyFile = new File(documentsDir, "untitled_" + counter + ".py");
+          counter++;
+        }
+        pyFile.createNewFile();
+        
+        final var code = LogisimPythonBindings.generatePythonCode(project.getCurrentCircuit());
+        Files.writeString(pyFile.toPath(), code, StandardCharsets.UTF_8);
+        
+        scriptPathField.setText(pyFile.getAbsolutePath().replace('\\', '/'));
+        inputArea.setText(code);
+      } catch (IOException e) {
+        outputArea.append("\n[error] Could not create new python file in Documents: " + e.getMessage() + "\n");
+      }
+    } else {
+      final var circPath = mainFile.getAbsolutePath();
+      final var pyPath = circPath.substring(0, circPath.lastIndexOf('.')) + ".py";
+      final var pyFile = new File(pyPath);
+      scriptPathField.setText(pyPath.replace('\\', '/'));
+      
+      try {
+        if (pyFile.exists()) {
+          inputArea.setText(Files.readString(pyFile.toPath(), StandardCharsets.UTF_8));
+        } else {
+          final var code = LogisimPythonBindings.generatePythonCode(project.getCurrentCircuit());
+          Files.writeString(pyFile.toPath(), code, StandardCharsets.UTF_8);
+          inputArea.setText(code);
+        }
+      } catch (IOException e) {
+        outputArea.append("\n[error] Could not read or create python file: " + e.getMessage() + "\n");
+      }
+    }
+  }
+
+  public void updatePythonCode(com.cburch.logisim.circuit.Circuit circuit) {
+    if (circuit == null) return;
+    final String pyCode = LogisimPythonBindings.generatePythonCode(circuit);
+    SwingUtilities.invokeLater(() -> {
+      inputArea.setText(pyCode);
+    });
+  }
+
+  public void setScriptPath(String path) {
+    if (path != null) {
+      SwingUtilities.invokeLater(() -> {
+        scriptPathField.setText(path.replace('\\', '/'));
+      });
+    }
+  }
+
+  public void saveLinkedPythonFile() {
+    final var pathText = scriptPathField.getText().trim();
+    if (pathText.isBlank()) {
+      return;
+    }
+    final var path = resolvePath(pathText);
+    if (path != null) {
+      try {
+        final var parent = path.getParent();
+        if (parent != null) {
+          Files.createDirectories(parent);
+        }
+        Files.writeString(path, inputArea.getText(), StandardCharsets.UTF_8);
+        outputArea.append("\n[ok] Saved Python script to " + path + "\n");
+      } catch (IOException e) {
+        outputArea.append("\n[error] Could not save Python script: " + e.getMessage() + "\n");
+      }
+    }
   }
 }

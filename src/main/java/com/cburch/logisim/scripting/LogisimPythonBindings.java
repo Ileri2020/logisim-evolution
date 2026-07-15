@@ -939,4 +939,153 @@ public class LogisimPythonBindings {
       if (!token.isBlank()) aliases.add(token);
     }
   }
+
+  public record ComponentInfo(String category, String type) {}
+
+  public static ComponentInfo getComponentInfo(ComponentFactory factory) {
+    if (factory == null) return null;
+    for (final var entry : GATE_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("gate", entry.getKey());
+      }
+    }
+    for (final var entry : WIRING_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("wiring", entry.getKey());
+      }
+    }
+    for (final var entry : PLEXER_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("plexer", entry.getKey());
+      }
+    }
+    for (final var entry : ARITH_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("arith", entry.getKey());
+      }
+    }
+    for (final var entry : FP_ARITH_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("fp_arith", entry.getKey());
+      }
+    }
+    for (final var entry : MEMORY_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("memory", entry.getKey());
+      }
+    }
+    for (final var entry : IO_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("io", entry.getKey());
+      }
+    }
+    for (final var entry : TTL_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("ttl", entry.getKey());
+      }
+    }
+    for (final var entry : TCL_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("tcl", entry.getKey());
+      }
+    }
+    for (final var entry : BFH_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("bfh", entry.getKey());
+      }
+    }
+    for (final var entry : EXTRA_IO_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("extra_io", entry.getKey());
+      }
+    }
+    for (final var entry : SOC_MAP.entrySet()) {
+      if (entry.getValue() == factory) {
+        return new ComponentInfo("soc", entry.getKey());
+      }
+    }
+    return null;
+  }
+
+  public static String generatePythonCode(Circuit circuit) {
+    if (circuit == null) {
+      return "";
+    }
+    final var sb = new StringBuilder();
+    sb.append("from logisim_py.api import *\n\n");
+    sb.append("circuit = Circuit('").append(circuit.getName()).append("')\n\n");
+
+    final var counters = new java.util.HashMap<String, Integer>();
+    
+    for (final var comp : circuit.getNonWires()) {
+      final var factory = comp.getFactory();
+      final var info = getComponentInfo(factory);
+      
+      String type = (info != null) ? info.type() : factory.getName().toLowerCase().replace(" ", "_").replace("gate", "").trim();
+      String category = (info != null) ? info.category() : "wiring";
+      
+      final var labelAttr = comp.getAttributeSet().getValue(StdAttr.LABEL);
+      String label = (labelAttr != null && !labelAttr.toString().isBlank()) ? labelAttr.toString() : "";
+      
+      String pyName;
+      if (!label.isEmpty()) {
+        pyName = label.replaceAll("[^a-zA-Z0-9_]", "_");
+      } else {
+        final var count = counters.getOrDefault(type, 0);
+        pyName = type + count;
+        counters.put(type, count + 1);
+      }
+      
+      final var loc = comp.getLocation();
+      final var x = loc.getX();
+      final var y = loc.getY();
+      
+      sb.append("circuit.add(");
+      if ("gate".equals(category)) {
+        sb.append("Gate('").append(type).append("', '").append(pyName).append("', x=").append(x).append(", y=").append(y);
+      } else {
+        final var className = toCamelCase(type);
+        sb.append(className).append("('").append(pyName).append("', x=").append(x).append(", y=").append(y);
+      }
+      
+      if (factory == Pin.FACTORY) {
+        final var typeVal = comp.getAttributeSet().getValue(Pin.ATTR_TYPE);
+        final var isInput = (typeVal == null || typeVal == Pin.INPUT);
+        sb.append(", is_input=").append(isInput ? "True" : "False");
+      }
+      
+      if (!label.isEmpty()) {
+        sb.append(", label='").append(label.replace("'", "\\'")).append("'");
+      }
+      sb.append("))\n");
+    }
+    
+    sb.append("\n");
+    
+    var wireCount = 0;
+    for (final var wire : circuit.getWires()) {
+      final var e0 = wire.getEnd0();
+      final var e1 = wire.getEnd1();
+      sb.append("circuit.add(Wire('wire").append(wireCount++)
+        .append("', source='").append(e0.getX()).append(",").append(e0.getY())
+        .append("', target='").append(e1.getX()).append(",").append(e1.getY())
+        .append("'))\n");
+    }
+    
+    return sb.toString();
+  }
+  
+  private static String toCamelCase(String s) {
+    if (s == null || s.isEmpty()) return "";
+    if ("por".equals(s)) return "Por";
+    final var parts = s.split("[_-]");
+    final var sb = new StringBuilder();
+    for (final var part : parts) {
+      if (!part.isEmpty()) {
+        sb.append(Character.toUpperCase(part.charAt(0)));
+        sb.append(part.substring(1));
+      }
+    }
+    return sb.toString();
+  }
 }

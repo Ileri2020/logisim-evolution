@@ -396,6 +396,19 @@ public final class ProjectActions {
     if (ret) {
       AppPreferences.updateRecentFile(f);
       proj.setFileAsClean();
+      try {
+        final var frame = proj.getFrame();
+        if (frame != null) {
+          final com.cburch.logisim.scripting.PythonConsolePanel pyPanel = frame.getPythonConsolePanel();
+          if (pyPanel != null) {
+            final var circPath = f.getAbsolutePath();
+            final var pyPath = circPath.substring(0, circPath.lastIndexOf('.')) + ".py";
+            pyPanel.setScriptPath(pyPath);
+            pyPanel.saveLinkedPythonFile();
+          }
+        }
+      } catch (Throwable ignored) {
+      }
     }
     proj.setTool(oldTool);
     return ret;
