@@ -25,9 +25,7 @@ jobs:
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: ${{ env.JDK_DISTRO }}
-
-      - name: Set up Gradle caching
-        uses: gradle/actions/setup-gradle@v4
+          cache: gradle
 
       - name: "Build MSI"
         run: .\gradlew.bat createMsi -x checkstyleMain -x checkstyleTest
