@@ -434,9 +434,17 @@ public class LogisimPythonBindings {
     public boolean has_project() { return project != null; }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // logisim.ops
-  // ═══════════════════════════════════════════════════════════════════════════
+  public void writeOutput(String text) {
+    if (context != null && context.project != null) {
+      final var frame = context.project.getFrame();
+      if (frame != null) {
+        final var panel = frame.getPythonConsolePanel();
+        if (panel != null) {
+          panel.appendOutput(text);
+        }
+      }
+    }
+  }
 
   /** Circuit-mutation operations – mirrors Blender's {@code bpy.ops}. */
   public class OpsProxy {
@@ -802,6 +810,19 @@ public class LogisimPythonBindings {
     public String available_soc() {
       return String.join(", ", SOC_MAP.keySet());
     }
+
+    public boolean clear_circuit() {
+      final var proj = context.project;
+      if (!checkProject(proj, "clear_circuit")) return false;
+      final var circuit = proj.getCurrentCircuit();
+      if (!checkCircuit(circuit, "clear_circuit")) return false;
+
+      final var mut = new CircuitMutation(circuit);
+      mut.clear();
+      doMutation(proj, mut, "Script: clear circuit");
+      logger.info("clear_circuit: cleared active circuit '{}'", circuit.getName());
+      return true;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -844,6 +865,13 @@ public class LogisimPythonBindings {
       String actionLabel) {
     final var mut = new CircuitMutation(circuit);
     mut.add(comp);
+    doMutation(proj, mut, actionLabel);
+  }
+
+  private static void doMutation(
+      Project proj,
+      CircuitMutation mut,
+      String actionLabel) {
     proj.doAction(mut.toAction(new StringGetter() {
       @Override public String toString() { return actionLabel; }
     }));

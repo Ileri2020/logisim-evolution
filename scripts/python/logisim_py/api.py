@@ -1034,6 +1034,11 @@ class Circuit:
         self._x_cursor: int = 100
         self._y_cursor: int = 100
         self._y_step: int = 60
+        if _is_embedded():
+            try:
+                logisim.ops.clear_circuit()
+            except Exception as exc:
+                print(f"[logisim] failed to clear circuit: {exc}")
 
     def add(self, element: "CircuitElement") -> None:
         """Add a circuit element.

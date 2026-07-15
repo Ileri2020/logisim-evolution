@@ -119,6 +119,16 @@ public class PythonCircuitScriptRunner {
     if (path.isAbsolute()) {
       return path.normalize().toString();
     }
+    
+    var current = Path.of(System.getProperty("user.dir", ".")).toAbsolutePath();
+    while (current != null) {
+      final var candidate = current.resolve(configuredPath);
+      if (Files.isDirectory(candidate)) {
+        return candidate.normalize().toString();
+      }
+      current = current.getParent();
+    }
+    
     return Path.of(System.getProperty("user.dir", ".")).resolve(path).normalize().toString();
   }
 

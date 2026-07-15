@@ -12,6 +12,8 @@ package com.cburch.logisim.scripting;
 import com.cburch.logisim.proj.Project;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
@@ -179,9 +181,35 @@ public class PythonScriptManager implements AutoCloseable {
     try {
       logger.info("Running embedded Python script: {}", scriptFile.getAbsolutePath());
 
-      // Add the script's directory to sys.path so local imports work.
+      // Add the script's own directory to sys.path.
       final var scriptDir = scriptFile.getParentFile().getAbsolutePath().replace("\\", "\\\\");
       eval("import sys; _sp='" + scriptDir + "'; (sys.path.insert(0,_sp) if _sp not in sys.path else None)");
+
+      // Walk upwards from the script's location to find the scripts/python package root.
+      // This is the directory that contains the logisim_py package folder.
+      Path searchDir = scriptFile.getParentFile().toPath().toAbsolutePath();
+      Path packageRoot = null;
+      while (searchDir != null) {
+        if (Files.isDirectory(searchDir.resolve("logisim_py"))) {
+          packageRoot = searchDir;
+          break;
+        }
+        // Also check if this dir contains scripts/python/logisim_py anywhere up the tree
+        final var candidate = searchDir.resolve("scripts").resolve("python");
+        if (Files.isDirectory(candidate.resolve("logisim_py"))) {
+          packageRoot = candidate;
+          break;
+        }
+        searchDir = searchDir.getParent();
+      }
+
+      if (packageRoot != null) {
+        final var pkgPath = packageRoot.toString().replace("\\", "\\\\");
+        eval("import sys; _pp='" + pkgPath + "'; (sys.path.insert(0,_pp) if _pp not in sys.path else None)");
+        logger.info("Injected logisim_py package root: {}", packageRoot);
+      } else {
+        logger.warn("Could not locate logisim_py package root for script: {}", scriptFile);
+      }
 
       final var src =
           Source.newBuilder(PYTHON, scriptFile).mimeType("text/x-python").build();
@@ -189,12 +217,20 @@ public class PythonScriptManager implements AutoCloseable {
       logger.info("Script completed successfully: {}", scriptFile.getName());
       return true;
     } catch (PolyglotException e) {
-      logger.error(
-          "Python script '{}' failed at {}: {}",
-          scriptFile.getName(), e.getSourceLocation(), e.getMessage());
+      final var errText = "\nTraceback (most recent call):\n  File \"" + scriptFile.getName() + "\", line " + 
+          (e.getSourceLocation() != null ? e.getSourceLocation().getStartLine() : "?") + 
+          "\n" + e.getMessage() + "\n";
+      logger.error("Python script '{}' failed: {}", scriptFile.getName(), errText);
+      if (bindings != null) {
+        bindings.writeOutput(errText);
+      }
       return false;
     } catch (IOException e) {
-      logger.error("Could not read script file '{}': {}", scriptFile, e.getMessage(), e);
+      final var errText = "\n[error] Could not read script file: " + e.getMessage() + "\n";
+      logger.error(errText, e);
+      if (bindings != null) {
+        bindings.writeOutput(errText);
+      }
       return false;
     }
   }
