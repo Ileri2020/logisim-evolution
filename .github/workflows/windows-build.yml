@@ -26,6 +26,20 @@ jobs:
           java-version: ${{ env.JDK_VERSION }}
           distribution: ${{ env.JDK_DISTRO }}
 
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          choco install wixtoolset -y --no-progress
+          $wixRoot = Get-ChildItem "$env:ProgramFiles(x86)\WiX Toolset*" -Directory | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $wixRoot) {
+            throw "WiX Toolset was not installed"
+          }
+          $wixBin = Join-Path $wixRoot "bin"
+          if (-not (Test-Path (Join-Path $wixBin "light.exe"))) {
+            throw "WiX Toolset binaries were not found"
+          }
+          Add-Content $env:GITHUB_PATH $wixBin
+
       - name: Configure Gradle cache directory
         shell: bash
         run: |
