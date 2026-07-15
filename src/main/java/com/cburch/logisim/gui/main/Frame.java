@@ -46,6 +46,7 @@ import com.cburch.logisim.proj.ProjectListener;
 import com.cburch.logisim.proj.Projects;
 import com.cburch.logisim.scripting.PythonConsolePanel;
 import com.cburch.logisim.scripting.PythonContextRegistry;
+import com.cburch.logisim.scripting.PythonScriptManager;
 import com.cburch.logisim.tools.AddTool;
 import com.cburch.logisim.tools.Tool;
 import com.cburch.logisim.util.HorizontalSplitPane;
@@ -409,6 +410,10 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
 
   public RegTabContent getRegTabContent() {
     return regTabContent;
+  }
+
+  public PythonConsolePanel getPythonConsolePanel() {
+    return pythonConsolePanel;
   }
 
   /**
