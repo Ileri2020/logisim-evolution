@@ -29,15 +29,30 @@ jobs:
       - name: Install WiX Toolset
         shell: pwsh
         run: |
-          choco install wixtoolset -y --no-progress
-          $wixRoot = Get-ChildItem "$env:ProgramFiles(x86)\WiX Toolset*" -Directory | Select-Object -First 1 -ExpandProperty FullName
+          choco install wixtoolset -y --no-progress --force
+
+          $candidateRoots = @(
+            "$env:ProgramFiles\WiX Toolset*",
+            "$env:ProgramFiles(x86)\WiX Toolset*"
+          )
+
+          $wixRoot = $null
+          foreach ($candidate in $candidateRoots) {
+            if (Test-Path $candidate) {
+              $wixRoot = (Get-ChildItem $candidate -Directory | Select-Object -First 1 -ExpandProperty FullName)
+              break
+            }
+          }
+
           if (-not $wixRoot) {
             throw "WiX Toolset was not installed"
           }
+
           $wixBin = Join-Path $wixRoot "bin"
           if (-not (Test-Path (Join-Path $wixBin "light.exe"))) {
             throw "WiX Toolset binaries were not found"
           }
+
           Add-Content $env:GITHUB_PATH $wixBin
 
       - name: Configure Gradle cache directory
