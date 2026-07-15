@@ -259,6 +259,13 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     KeyboardToolSelection.register(toolbar);
 
     PythonContextRegistry.get().bind(project, this);
+    // Ensure embedded Python manager knows about the active project/design tab.
+    try {
+      com.cburch.logisim.scripting.PythonScriptManager.getInstance().setActiveProject(project);
+      com.cburch.logisim.scripting.PythonScriptManager.getInstance().eval("f = globals().get('on_design_update')\nif callable(f):\n  f()\n");
+    } catch (Throwable ignored) {
+      // Ignore failures here; scripting may be disabled in some environments.
+    }
     project.setFrame(this);
     if (project.getTool() == null) {
       project.setTool(project.getOptions().getToolbarData().getFirstTool());
@@ -947,6 +954,12 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
       if (event.getAction() == CircuitEvent.ACTION_SET_NAME) {
         buildTitleString();
       }
+      // Forward any circuit changes to the embedded Python manager so scripts
+      // that define `on_design_update()` are invoked automatically.
+      try {
+          com.cburch.logisim.scripting.PythonScriptManager.getInstance().eval("f = globals().get('on_design_update')\nif callable(f):\n  f()\n");
+      } catch (Throwable ignored) {
+      }
     }
 
     private void enableSave() {
@@ -992,6 +1005,12 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
             appearance.setCircuit(project, project.getCircuitState());
           }
           viewAttributes(project.getTool());
+          // Inform embedded scripting manager of the newly selected circuit/project.
+          try {
+            com.cburch.logisim.scripting.PythonScriptManager.getInstance().setActiveProject(project);
+            com.cburch.logisim.scripting.PythonScriptManager.getInstance().eval("f = globals().get('on_design_update')\nif callable(f):\n  f()\n");
+          } catch (Throwable ignored) {
+          }
         } else if (event.getData() instanceof HdlModel model) {
           setHdlEditorView(model);
           viewCircuitAttributes();

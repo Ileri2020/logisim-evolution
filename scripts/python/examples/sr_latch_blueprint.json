@@ -1,0 +1,25 @@
+{
+  "name": "sr_latch",
+  "elements": [
+    {
+      "type": "pin",
+      "name": "s"
+    },
+    {
+      "type": "pin",
+      "name": "r"
+    },
+    {
+      "type": "sr_latch",
+      "name": "latch0"
+    },
+    {
+      "type": "led",
+      "name": "q"
+    },
+    {
+      "type": "led",
+      "name": "q_bar"
+    }
+  ]
+}

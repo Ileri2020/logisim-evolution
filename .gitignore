@@ -292,3 +292,6 @@ gradle-app.setting
 
 # python代码
 *.py
+!scripts/python/**/*.py
+__pycache__/
+/logisim-app/

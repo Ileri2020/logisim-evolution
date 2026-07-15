@@ -1,21 +1,27 @@
 package com.cburch.logisim.scripting;
 
 import com.cburch.logisim.proj.Project;
+import com.cburch.logisim.util.JFileChoosers;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 public class PythonConsolePanel extends JPanel {
   private static final long serialVersionUID = 1L;
@@ -44,7 +50,15 @@ public class PythonConsolePanel extends JPanel {
             + "circuit.add(Gate('and', 'and0'))\n"
             + "print('ready')\n");
 
-    scriptPathField.setText("scripts/python/generated_blueprint.json");
+    scriptPathField.setText("scripts/python/examples/binary_counter.py");
+    scriptPathField.setToolTipText("Click to choose a Python script from the built-in examples or another location.");
+    scriptPathField.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(MouseEvent e) {
+            chooseScriptFile();
+          }
+        });
 
     final var controls = new JPanel(new BorderLayout(6, 0));
     controls.add(scriptPathField, BorderLayout.CENTER);
@@ -88,16 +102,82 @@ public class PythonConsolePanel extends JPanel {
     });
   }
 
+  private void chooseScriptFile() {
+    final var chooser = createScriptChooser();
+    final var choice = chooser.showOpenDialog(this);
+    if (choice != JFileChooser.APPROVE_OPTION) {
+      return;
+    }
+
+    final var selectedFile = chooser.getSelectedFile();
+    if (selectedFile == null) {
+      return;
+    }
+
+    final var displayPath = toDisplayPath(selectedFile);
+    scriptPathField.setText(displayPath);
+
+    if (selectedFile.isFile() && selectedFile.getName().endsWith(".py")) {
+      try {
+        inputArea.setText(Files.readString(selectedFile.toPath(), StandardCharsets.UTF_8));
+      } catch (IOException ex) {
+        outputArea.append("\n[error] could not read selected script: " + ex.getMessage() + "\n");
+      }
+    }
+  }
+
+  private JFileChooser createScriptChooser() {
+    final var chooser = JFileChoosers.createSelected(resolveInitialSelection());
+    chooser.setDialogTitle("Select Python Script");
+    chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+    chooser.setAcceptAllFileFilterUsed(false);
+    chooser.setFileFilter(new FileNameExtensionFilter("Python scripts", "py"));
+    return chooser;
+  }
+
+  private File resolveInitialSelection() {
+    final var pathText = scriptPathField.getText().trim();
+    if (!pathText.isBlank()) {
+      final var candidate = resolvePath(pathText);
+      if (candidate != null && Files.exists(candidate)) {
+        return candidate.toFile();
+      }
+    }
+
+    final var examplesDir = resolveWorkspaceRoot().resolve("scripts/python/examples");
+    if (Files.isDirectory(examplesDir)) {
+      return examplesDir.toFile();
+    }
+    return resolveWorkspaceRoot().toFile();
+  }
+
+  private Path resolveWorkspaceRoot() {
+    return Path.of(System.getProperty("user.dir"));
+  }
+
+  private Path resolvePath(String pathText) {
+    final var path = Path.of(pathText);
+    if (path.isAbsolute()) {
+      return path;
+    }
+    return resolveWorkspaceRoot().resolve(path);
+  }
+
+  private String toDisplayPath(File file) {
+    final var workspaceRoot = resolveWorkspaceRoot();
+    try {
+      final var relative = workspaceRoot.relativize(file.toPath().toAbsolutePath());
+      return relative.toString().replace('\\', '/');
+    } catch (IllegalArgumentException ignored) {
+      return file.getAbsolutePath();
+    }
+  }
+
   private File resolveOutputFile() {
     final var pathText = scriptPathField.getText().trim();
     if (pathText.isBlank()) {
       return null;
     }
-    final var path = Path.of(pathText);
-    if (!path.isAbsolute()) {
-      final var workspaceRoot = Path.of(System.getProperty("user.dir"));
-      return workspaceRoot.resolve(path).toFile();
-    }
-    return path.toFile();
+    return resolvePath(pathText).toFile();
   }
 }

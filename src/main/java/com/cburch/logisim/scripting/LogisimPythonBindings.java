@@ -12,10 +12,13 @@ package com.cburch.logisim.scripting;
 import com.cburch.logisim.circuit.Circuit;
 import com.cburch.logisim.circuit.CircuitMutation;
 import com.cburch.logisim.circuit.SplitterFactory;
+import com.cburch.logisim.circuit.Wire;
+import com.cburch.logisim.comp.Component;
+import com.cburch.logisim.comp.ComponentFactory;
 import com.cburch.logisim.data.AttributeOption;
 import com.cburch.logisim.data.Location;
-import com.cburch.logisim.comp.ComponentFactory;
 import com.cburch.logisim.instance.InstanceFactory;
+import com.cburch.logisim.instance.StdAttr;
 import com.cburch.logisim.proj.Project;
 import com.cburch.logisim.soc.Soc;
 import com.cburch.logisim.std.arith.ArithmeticLibrary;
@@ -42,6 +45,8 @@ import com.cburch.logisim.std.wiring.WiringLibrary;
 import com.cburch.logisim.tools.AddTool;
 import com.cburch.logisim.tools.Library;
 import com.cburch.logisim.util.StringGetter;
+import com.cburch.logisim.data.Attribute;
+import com.cburch.logisim.tools.SetAttributeAction;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -212,11 +217,11 @@ public class LogisimPythonBindings {
     alias(ARITH_MAP, "add",    "adder");
     alias(ARITH_MAP, "shift",  "shifter");
     alias(ARITH_MAP, "minmax", "min/max");
-    alias(ARITH_MAP, "min_max","min/max");
+    alias(ARITH_MAP, "min_max", "min/max");
     alias(ARITH_MAP, "maximum", "min/max");
     alias(ARITH_MAP, "minimum", "min/max");
-    alias(ARITH_MAP, "bit_add","bit_adder");
-    alias(ARITH_MAP, "bit_find","bit_finder");
+    alias(ARITH_MAP, "bit_add", "bit_adder");
+    alias(ARITH_MAP, "bit_find", "bit_finder");
   }
 
   private static void buildFpArithMap() {
@@ -226,41 +231,59 @@ public class LogisimPythonBindings {
         FP_ARITH_MAP.put(key, f);
       }
     }
-    alias(FP_ARITH_MAP, "fp_abs", "fpabsolute");
-    alias(FP_ARITH_MAP, "fp_cmp", "fpcomparator");
-    alias(FP_ARITH_MAP, "fp_sqrt", "fpsquareroot");
-    alias(FP_ARITH_MAP, "fp_exp", "fpexponentiator");
-    alias(FP_ARITH_MAP, "fp_neg", "fpnegator");
-    alias(FP_ARITH_MAP, "fp_mul", "fpmultiplier");
-    alias(FP_ARITH_MAP, "fp_div", "fpdivider");
-    alias(FP_ARITH_MAP, "fp_sub", "fpsubtractor");
-    alias(FP_ARITH_MAP, "fp_add", "fpadder");
-    alias(FP_ARITH_MAP, "fp_minmax", "fpminmax");
-    alias(FP_ARITH_MAP, "fp_maximum", "fpminmax");
-    alias(FP_ARITH_MAP, "fp_minimum", "fpminmax");
-    alias(FP_ARITH_MAP, "fp_absolute", "fpabsolute");
-    alias(FP_ARITH_MAP, "fp_comparator", "fpcomparator");
-    alias(FP_ARITH_MAP, "fp_square_root", "fpsquareroot");
-    alias(FP_ARITH_MAP, "fp_exponentiator", "fpexponentiator");
-    alias(FP_ARITH_MAP, "fp_negator", "fpnegator");
-    alias(FP_ARITH_MAP, "fp_multiplier", "fpmultiplier");
-    alias(FP_ARITH_MAP, "fp_divider", "fpdivider");
-    alias(FP_ARITH_MAP, "fp_subtractor", "fpsubtractor");
-    alias(FP_ARITH_MAP, "fp_adder", "fpadder");
-    alias(FP_ARITH_MAP, "floating_point_adder", "fpadder");
-    alias(FP_ARITH_MAP, "floating_point_subtractor", "fpsubtractor");
-    alias(FP_ARITH_MAP, "floating_point_multiplier", "fpmultiplier");
-    alias(FP_ARITH_MAP, "floating_point_divider", "fpdivider");
-    alias(FP_ARITH_MAP, "floating_point_comparator", "fpcomparator");
-    alias(FP_ARITH_MAP, "floating_point_negator", "fpnegator");
-    alias(FP_ARITH_MAP, "floating_point_absolute_value", "fpabsolute");
-    alias(FP_ARITH_MAP, "floating_point_square_root", "fpsquareroot");
-    alias(FP_ARITH_MAP, "floating_point_rounder", "fpround");
-    alias(FP_ARITH_MAP, "floating_point_converter", "fptofp");
-    alias(FP_ARITH_MAP, "integer_to_floating_point_converter", "inttofp");
-    alias(FP_ARITH_MAP, "floating_point_to_integer_converter", "fptoint");
-    alias(FP_ARITH_MAP, "floating_point_exponent_extractor", "fpexponentiator");
-    alias(FP_ARITH_MAP, "floating_point_mantissa_extractor", "fpclassificator");
+
+    // Canonical keys used by the Java library (for example: fp_adder, fp_subtractor, ...).
+    alias(FP_ARITH_MAP, "fp_abs", "fp_absolute");
+    alias(FP_ARITH_MAP, "fp_cmp", "fp_comparator");
+    alias(FP_ARITH_MAP, "fp_sqrt", "fp_square_root");
+    alias(FP_ARITH_MAP, "fp_exp", "fp_exponentiator");
+    alias(FP_ARITH_MAP, "fp_neg", "fp_negator");
+    alias(FP_ARITH_MAP, "fp_mul", "fp_multiplier");
+    alias(FP_ARITH_MAP, "fp_div", "fp_divider");
+    alias(FP_ARITH_MAP, "fp_sub", "fp_subtractor");
+    alias(FP_ARITH_MAP, "fp_add", "fp_adder");
+    alias(FP_ARITH_MAP, "fp_minmax", "fp_min_max");
+    alias(FP_ARITH_MAP, "fp_maximum", "fp_min_max");
+    alias(FP_ARITH_MAP, "fp_minimum", "fp_min_max");
+    alias(FP_ARITH_MAP, "fp_absolute", "fp_absolute");
+    alias(FP_ARITH_MAP, "fp_comparator", "fp_comparator");
+    alias(FP_ARITH_MAP, "fp_square_root", "fp_square_root");
+    alias(FP_ARITH_MAP, "fp_exponentiator", "fp_exponentiator");
+    alias(FP_ARITH_MAP, "fp_negator", "fp_negator");
+    alias(FP_ARITH_MAP, "fp_multiplier", "fp_multiplier");
+    alias(FP_ARITH_MAP, "fp_divider", "fp_divider");
+    alias(FP_ARITH_MAP, "fp_subtractor", "fp_subtractor");
+    alias(FP_ARITH_MAP, "fp_adder", "fp_adder");
+    alias(FP_ARITH_MAP, "floating_point_adder", "fp_adder");
+    alias(FP_ARITH_MAP, "floating_point_subtractor", "fp_subtractor");
+    alias(FP_ARITH_MAP, "floating_point_multiplier", "fp_multiplier");
+    alias(FP_ARITH_MAP, "floating_point_divider", "fp_divider");
+    alias(FP_ARITH_MAP, "floating_point_comparator", "fp_comparator");
+    alias(FP_ARITH_MAP, "floating_point_negator", "fp_negator");
+    alias(FP_ARITH_MAP, "floating_point_absolute_value", "fp_absolute");
+    alias(FP_ARITH_MAP, "floating_point_square_root", "fp_square_root");
+    alias(FP_ARITH_MAP, "floating_point_rounder", "fp_round");
+    alias(FP_ARITH_MAP, "floating_point_converter", "fp_to_fp");
+    alias(FP_ARITH_MAP, "integer_to_floating_point_converter", "int_to_fp");
+    alias(FP_ARITH_MAP, "floating_point_to_integer_converter", "fp_to_int");
+    alias(FP_ARITH_MAP, "floating_point_exponent_extractor", "fp_exponentiator");
+    alias(FP_ARITH_MAP, "floating_point_mantissa_extractor", "fp_classificator");
+
+    // Shorthand names used by the Python examples/tests.
+    alias(FP_ARITH_MAP, "fpadder", "fp_adder");
+    alias(FP_ARITH_MAP, "fpsubtractor", "fp_subtractor");
+    alias(FP_ARITH_MAP, "fpmultiplier", "fp_multiplier");
+    alias(FP_ARITH_MAP, "fpdivider", "fp_divider");
+    alias(FP_ARITH_MAP, "fpcomparator", "fp_comparator");
+    alias(FP_ARITH_MAP, "fpnegator", "fp_negator");
+    alias(FP_ARITH_MAP, "fpabsolute", "fp_absolute");
+    alias(FP_ARITH_MAP, "fpsquareroot", "fp_square_root");
+    alias(FP_ARITH_MAP, "fpround", "fp_round");
+    alias(FP_ARITH_MAP, "fptofp", "fp_to_fp");
+    alias(FP_ARITH_MAP, "inttofp", "int_to_fp");
+    alias(FP_ARITH_MAP, "fptoint", "fp_to_int");
+    alias(FP_ARITH_MAP, "fpexponentiator", "fp_exponentiator");
+    alias(FP_ARITH_MAP, "fpclassificator", "fp_classificator");
   }
 
   private static void buildMemoryMap() {
@@ -310,6 +333,10 @@ public class LogisimPythonBindings {
         TCL_MAP.put(key, f);
       }
     }
+    alias(TCL_MAP, "tcl_generic", "tclgeneric");
+    alias(TCL_MAP, "tcl_generic_component", "tclgeneric");
+    alias(TCL_MAP, "tclconsole", "tclconsolereds");
+    alias(TCL_MAP, "tcl_console", "tclconsolereds");
   }
 
   private static void buildBfhMap() {
@@ -319,8 +346,12 @@ public class LogisimPythonBindings {
         BFH_MAP.put(key, f);
       }
     }
-    alias(BFH_MAP, "bin_to_bcd", "bin2bcd");
-    alias(BFH_MAP, "bcd_to_seven_segment", "bcd2sevensegment");
+    alias(BFH_MAP, "bin_to_bcd", "binary_to_bcd_converter");
+    alias(BFH_MAP, "bcd_to_seven_segment", "bcd_to_7_segment_decoder");
+    alias(BFH_MAP, "binary_to_bcd_converter", "binary_to_bcd_converter");
+    alias(BFH_MAP, "bcd_to_7_segment_decoder", "bcd_to_7_segment_decoder");
+    alias(BFH_MAP, "bin2bcd", "binary_to_bcd_converter");
+    alias(BFH_MAP, "bcd2sevensegment", "bcd_to_7_segment_decoder");
   }
 
   private static void buildExtraIoMap() {
@@ -467,6 +498,100 @@ public class LogisimPythonBindings {
       return placeFrom(GATE_MAP, gateType, x, y, "gate");
     }
 
+    /** Place a component at an explicit coordinate and optionally assign a name. */
+    public boolean place_component(String componentType, int x, int y, String label) {
+      final var key = componentType == null ? "" : componentType.toLowerCase().trim();
+      if (key.startsWith("gate:")) {
+        return add_gate(key.substring(5), x, y, label);
+      }
+      if (key.startsWith("wiring:")) {
+        return add_wiring(key.substring(7), x, y);
+      }
+      if (key.startsWith("plexer:")) {
+        return add_plexer(key.substring(7), x, y);
+      }
+      if (key.startsWith("arith:")) {
+        return add_arith(key.substring(6), x, y);
+      }
+      if (key.startsWith("fp:")) {
+        return add_fp_arith(key.substring(3), x, y);
+      }
+      if (key.startsWith("memory:")) {
+        return add_memory(key.substring(7), x, y);
+      }
+      if (key.startsWith("io:")) {
+        return add_io(key.substring(3), x, y);
+      }
+      if (key.startsWith("ttl:")) {
+        return add_ttl(key.substring(4), x, y);
+      }
+      if (key.startsWith("tcl:")) {
+        return add_tcl(key.substring(4), x, y);
+      }
+      if (key.startsWith("bfh:")) {
+        return add_bfh(key.substring(4), x, y);
+      }
+      if (key.startsWith("extra_io:")) {
+        return add_extra_io(key.substring(9), x, y);
+      }
+      if (key.startsWith("soc:")) {
+        return add_soc(key.substring(4), x, y);
+      }
+      return false;
+    }
+
+    /** Create a simple wire between two coordinate points. */
+    public boolean add_wire(int x1, int y1, int x2, int y2) {
+      final var proj = context.project;
+      if (!checkProject(proj, "add_wire")) return false;
+      final var circuit = proj.getCurrentCircuit();
+      if (!checkCircuit(circuit, "add_wire")) return false;
+
+      final var loc0 = Location.create(x1, y1, false);
+      final var loc1 = Location.create(x2, y2, false);
+      final var wire = Wire.create(loc0, loc1);
+      final var mut = new CircuitMutation(circuit);
+      mut.add(wire);
+      final var action = mut.toAction(new StringGetter() {
+        @Override public String toString() { return "Script: add wire"; }
+      });
+      proj.doAction(action);
+      logger.info("Placed wire from ({},{}) to ({},{})", x1, y1, x2, y2);
+      return true;
+    }
+
+    /** Connect a source component's named port to a target component's named port. */
+    public boolean connect_ports(String sourceName, String sourcePort, String targetName, String targetPort) {
+      final var proj = context.project;
+      if (!checkProject(proj, "connect_ports")) return false;
+      final var circuit = proj.getCurrentCircuit();
+      if (!checkCircuit(circuit, "connect_ports")) return false;
+
+      final var sourceComp = findComponentByLabel(circuit, sourceName);
+      final var targetComp = findComponentByLabel(circuit, targetName);
+      if (sourceComp == null || targetComp == null) {
+        logger.warn("connect_ports failed: unknown component name (source='{}', target='{}')", sourceName, targetName);
+        return false;
+      }
+
+      final var sourceEnd = findPort(sourceComp, sourcePort);
+      final var targetEnd = findPort(targetComp, targetPort);
+      if (sourceEnd == null || targetEnd == null) {
+        logger.warn("connect_ports failed: unknown port (source='{}:{}', target='{}:{}')", sourceName, sourcePort, targetName, targetPort);
+        return false;
+      }
+
+      final var wire = Wire.create(sourceEnd.getLocation(), targetEnd.getLocation());
+      final var mut = new CircuitMutation(circuit);
+      mut.add(wire);
+      final var action = mut.toAction(new StringGetter() {
+        @Override public String toString() { return "Script: connect ports"; }
+      });
+      proj.doAction(action);
+      logger.info("Connected {}:{} to {}:{}", sourceName, sourcePort, targetName, targetPort);
+      return true;
+    }
+
     // ── Plexers ──────────────────────────────────────────────────────────────
 
     /**
@@ -531,24 +656,152 @@ public class LogisimPythonBindings {
       return placeFrom(SOC_MAP, socType, x, y, "soc");
     }
 
+    /**
+     * List components in the active circuit as "label (Factory Name)" strings.
+     */
+    public String[] list_components() {
+      final var proj = context.project;
+      if (!checkProject(proj, "list_components")) return new String[0];
+      final var circuit = proj.getCurrentCircuit();
+      if (!checkCircuit(circuit, "list_components")) return new String[0];
+      return circuit.getNonWires().stream()
+          .map(c -> {
+            final var lab = c.getAttributeSet().containsAttribute(StdAttr.LABEL)
+                ? String.valueOf(c.getAttributeSet().getValue(StdAttr.LABEL)) : "";
+            return (lab == null || lab.isBlank()) ? c.getFactory().getName() : (lab + " (" + c.getFactory().getName() + ")");
+          })
+          .toArray(String[]::new);
+    }
+
+    /**
+     * Get attributes for a named component (by label). Returns a map of attribute name -> value.
+     */
+    public java.util.Map<String, Object> get_component_attributes(String componentLabel) {
+      final var proj = context.project;
+      final var map = new java.util.LinkedHashMap<String, Object>();
+      if (!checkProject(proj, "get_component_attributes")) return map;
+      final var circuit = proj.getCurrentCircuit();
+      if (!checkCircuit(circuit, "get_component_attributes")) return map;
+      final var comp = findComponentByLabel(circuit, componentLabel);
+      if (comp == null) return map;
+      final var attrs = comp.getAttributeSet();
+      final var list = attrs.getAttributes();
+      if (list == null) return map;
+      for (final var attr : list) {
+        try {
+          map.put(attr.getName(), attrs.getValue(attr));
+        } catch (Throwable ignored) {
+        }
+      }
+      return map;
+    }
+
+    /**
+     * Set a single attribute on a component identified by its label. Value is provided as string
+     * and parsed by the Attribute.parse(...) implementation.
+     */
+    public boolean set_component_attribute(String componentLabel, String attributeName, String valueStr) {
+      final var proj = context.project;
+      if (!checkProject(proj, "set_component_attribute")) return false;
+      final var circuit = proj.getCurrentCircuit();
+      if (!checkCircuit(circuit, "set_component_attribute")) return false;
+      final var comp = findComponentByLabel(circuit, componentLabel);
+      if (comp == null) {
+        logger.warn("set_component_attribute: unknown component '{}'", componentLabel);
+        return false;
+      }
+
+      final var attrs = comp.getAttributeSet();
+      final var list = attrs.getAttributes();
+      if (list == null) {
+        logger.warn("set_component_attribute: component has no attribute list: {}", componentLabel);
+        return false;
+      }
+
+      Attribute<?> target = null;
+      for (final var a : list) {
+        if (a.getName().equalsIgnoreCase(attributeName) || a.getDisplayName().equalsIgnoreCase(attributeName)) {
+          target = a;
+          break;
+        }
+      }
+      if (target == null) {
+        logger.warn("set_component_attribute: attribute '{}' not found on component '{}'", attributeName, componentLabel);
+        return false;
+      }
+
+      Object parsedValue;
+      try {
+        parsedValue = target.parse(valueStr);
+      } catch (Exception e) {
+        logger.warn("set_component_attribute: failed to parse value '{}' for attribute '{}': {}", valueStr, attributeName, e.getMessage());
+        return false;
+      }
+
+      final var action = new SetAttributeAction(circuit, new StringGetter() {
+        @Override
+        public String toString() {
+          return "Script: set " + attributeName + " on " + componentLabel;
+        }
+      });
+      action.set(comp, target, parsedValue);
+      proj.doAction(action);
+      return true;
+    }
+
     // ── Discovery helpers ─────────────────────────────────────────────────────
 
     /** Returns all known gate type keys. */
-    public String available_gates()   { return String.join(", ", GATE_MAP.keySet()); }
+    public String available_gates() {
+      return String.join(", ", GATE_MAP.keySet());
+    }
+
     /** Returns all known wiring element type keys. */
-    public String available_wiring()  { return String.join(", ", WIRING_MAP.keySet()); }
+    public String available_wiring() {
+      return String.join(", ", WIRING_MAP.keySet());
+    }
+
     /** Returns all known plexer type keys. */
-    public String available_plexers() { return String.join(", ", PLEXER_MAP.keySet()); }
+    public String available_plexers() {
+      return String.join(", ", PLEXER_MAP.keySet());
+    }
+
     /** Returns all known arithmetic type keys. */
-    public String available_arith()   { return String.join(", ", ARITH_MAP.keySet()); }
-    public String available_fp_arith() { return String.join(", ", FP_ARITH_MAP.keySet()); }
-    public String available_memory()   { return String.join(", ", MEMORY_MAP.keySet()); }
-    public String available_io()       { return String.join(", ", IO_MAP.keySet()); }
-    public String available_ttl()      { return String.join(", ", TTL_MAP.keySet()); }
-    public String available_tcl()      { return String.join(", ", TCL_MAP.keySet()); }
-    public String available_bfh()      { return String.join(", ", BFH_MAP.keySet()); }
-    public String available_extra_io() { return String.join(", ", EXTRA_IO_MAP.keySet()); }
-    public String available_soc()      { return String.join(", ", SOC_MAP.keySet()); }
+    public String available_arith() {
+      return String.join(", ", ARITH_MAP.keySet());
+    }
+
+    public String available_fp_arith() {
+      return String.join(", ", FP_ARITH_MAP.keySet());
+    }
+
+    public String available_memory() {
+      return String.join(", ", MEMORY_MAP.keySet());
+    }
+
+    public String available_io() {
+      return String.join(", ", IO_MAP.keySet());
+    }
+
+    public String available_ttl() {
+      return String.join(", ", TTL_MAP.keySet());
+    }
+
+    public String available_tcl() {
+      return String.join(", ", TCL_MAP.keySet());
+    }
+
+    public String available_bfh() {
+      return String.join(", ", BFH_MAP.keySet());
+    }
+
+    public String available_extra_io() {
+      return String.join(", ", EXTRA_IO_MAP.keySet());
+    }
+
+    public String available_soc() {
+      return String.join(", ", SOC_MAP.keySet());
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -604,5 +857,86 @@ public class LogisimPythonBindings {
   private static boolean checkCircuit(com.cburch.logisim.circuit.Circuit circuit, String op) {
     if (circuit == null) { logger.warn("{} called but no circuit is active.", op); return false; }
     return true;
+  }
+
+  private static Component findComponentByLabel(com.cburch.logisim.circuit.Circuit circuit, String label) {
+    if (circuit == null || label == null || label.isBlank()) return null;
+    for (final var comp : circuit.getNonWires()) {
+      final var attrs = comp.getAttributeSet();
+      if (attrs != null && attrs.containsAttribute(StdAttr.LABEL)) {
+        final var compLabel = attrs.getValue(StdAttr.LABEL);
+        if (label.equals(compLabel)) return comp;
+      }
+    }
+    return null;
+  }
+
+  private static com.cburch.logisim.comp.EndData findPort(Component comp, String portName) {
+    if (comp == null || portName == null || portName.isBlank()) return null;
+
+    final var normalized = portName.trim().toLowerCase();
+    for (int index = 0; index < comp.getEnds().size(); index++) {
+      final var end = comp.getEnd(index);
+      final var aliases = buildPortAliases(normalized, comp, index);
+      for (final var alias : aliases) {
+        if (normalized.equals(alias)) return end;
+      }
+    }
+
+    final var fallback = switch (normalized) {
+      case "in", "input", "i", "a", "left", "0" -> 0;
+      case "out", "output", "o", "b", "right", "1" -> 1;
+      case "clk", "clock", "c" -> 0;
+      case "en", "enable", "e" -> 0;
+      case "sel", "select", "s" -> 0;
+      default -> -1;
+    };
+    if (fallback >= 0 && fallback < comp.getEnds().size()) {
+      return comp.getEnd(fallback);
+    }
+    return null;
+  }
+
+  private static java.util.List<String> buildPortAliases(String normalized, Component comp, int index) {
+    final var aliases = new java.util.ArrayList<String>();
+    aliases.add(normalized);
+
+    if (comp.getFactory() instanceof InstanceFactory factory) {
+      final var ports = factory.getPorts();
+      if (index >= 0 && index < ports.size()) {
+        final var port = ports.get(index);
+        final var tooltip = port == null ? null : port.getToolTip();
+        if (tooltip != null && !tooltip.isBlank()) {
+          addAliasVariants(aliases, tooltip);
+        }
+      }
+    }
+
+    final var factoryName = comp.getFactory() == null ? "" : comp.getFactory().getName().toLowerCase();
+    if (factoryName.contains("gate") || factoryName.contains("buffer") || factoryName.contains("not")) {
+      aliases.addAll(java.util.List.of("in", "out", "a", "b"));
+    } else if (factoryName.contains("adder") || factoryName.contains("subtractor") || factoryName.contains("multiplier") || factoryName.contains("divider")) {
+      aliases.addAll(java.util.List.of("a", "b", "out", "cin", "cout", "in0", "in1", "sum", "carry"));
+    } else if (factoryName.contains("mux") || factoryName.contains("multiplexer") || factoryName.contains("demux") || factoryName.contains("demultiplexer")) {
+      aliases.addAll(java.util.List.of("in", "out", "sel", "select"));
+    } else if (factoryName.contains("pin")) {
+      aliases.addAll(java.util.List.of("in", "out", "input", "output"));
+    }
+
+    return java.util.stream.StreamSupport.stream(new java.util.HashSet<>(aliases).spliterator(), false)
+        .toList();
+  }
+
+  private static void addAliasVariants(java.util.List<String> aliases, String raw) {
+    final var cleaned = raw.toLowerCase().trim();
+    aliases.add(cleaned);
+    aliases.add(cleaned.replace(" ", "_"));
+    aliases.add(cleaned.replace(" ", ""));
+    aliases.add(cleaned.replace("-", ""));
+    aliases.add(cleaned.replace("_", ""));
+
+    for (final var token : cleaned.split("[^a-z0-9]+")) {
+      if (!token.isBlank()) aliases.add(token);
+    }
   }
 }

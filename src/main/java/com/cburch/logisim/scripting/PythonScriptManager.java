@@ -12,7 +12,6 @@ package com.cburch.logisim.scripting;
 import com.cburch.logisim.proj.Project;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Source;
@@ -102,13 +101,14 @@ public class PythonScriptManager implements AutoCloseable {
 
       initialized = true;
       logger.info("GraalPy Python scripting engine initialized successfully.");
-    } catch (Exception e) {
-      logger.error("Failed to initialize embedded Python scripting engine: {}", e.getMessage(), e);
-      // Non-fatal: app continues, but scripting features will be unavailable.
+    } catch (Throwable e) {
+      logger.warn("Embedded Python runtime unavailable in this environment; scripting bindings will be disabled. {}", e.getMessage());
+      initialized = false;
       if (polyglotContext != null) {
         polyglotContext.close();
         polyglotContext = null;
       }
+      bindings = new LogisimPythonBindings(this);
     }
   }
 
@@ -229,5 +229,24 @@ public class PythonScriptManager implements AutoCloseable {
     }
     initialized = false;
     instance = null;
+  }
+
+  /**
+   * Notifies any running embedded scripts that the design has changed. If a
+   * top-level Python function named `on_design_update` is defined it will be
+   * invoked. Exceptions from the script are logged but do not propagate.
+   */
+  public synchronized void notifyDesignChanged() {
+    if (!ensureReady()) return;
+    try {
+      final String code = "f = globals().get('on_design_update')\n" +
+          "if callable(f):\n" +
+          "  f()\n";
+      polyglotContext.eval(PYTHON, code);
+    } catch (PolyglotException e) {
+      logger.error("Error while running on_design_update(): {}", e.getMessage());
+    } catch (Exception e) {
+      logger.error("Unexpected error notifying design change: {}", e.getMessage(), e);
+    }
   }
 }
