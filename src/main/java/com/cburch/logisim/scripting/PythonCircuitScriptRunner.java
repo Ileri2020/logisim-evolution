@@ -103,7 +103,7 @@ public class PythonCircuitScriptRunner {
   }
 
   private void configureEnvironment(java.util.Map<String, String> environment, Path contextPath) {
-    final var pythonPath = resolvePythonPath();
+    final var pythonPath = System.getProperty("logisim.python.path", "scripts/python");
     final var currentPath = environment.getOrDefault("PYTHONPATH", "");
     final var newPath = currentPath.isBlank() ? pythonPath : currentPath + File.pathSeparator + pythonPath;
     environment.put("PYTHONPATH", newPath);
@@ -111,25 +111,6 @@ public class PythonCircuitScriptRunner {
     if (contextPath != null) {
       environment.put("LOGISIM_CONTEXT_PATH", contextPath.toString());
     }
-  }
-
-  private String resolvePythonPath() {
-    final var configuredPath = System.getProperty("logisim.python.path", "scripts/python");
-    final var path = Path.of(configuredPath);
-    if (path.isAbsolute()) {
-      return path.normalize().toString();
-    }
-    
-    var current = Path.of(System.getProperty("user.dir", ".")).toAbsolutePath();
-    while (current != null) {
-      final var candidate = current.resolve(configuredPath);
-      if (Files.isDirectory(candidate)) {
-        return candidate.normalize().toString();
-      }
-      current = current.getParent();
-    }
-    
-    return Path.of(System.getProperty("user.dir", ".")).resolve(path).normalize().toString();
   }
 
   private String resolvePythonExecutable() {

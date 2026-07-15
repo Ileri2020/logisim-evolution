@@ -3,6 +3,7 @@ package com.cburch.logisim.scripting;
 import com.cburch.logisim.proj.Project;
 import com.cburch.logisim.util.JFileChoosers;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -32,7 +33,6 @@ public class PythonConsolePanel extends JPanel {
   public PythonConsolePanel(Project project) {
     this.project = project;
     buildUi();
-    initializeScriptFile();
   }
 
   private void buildUi() {
@@ -60,58 +60,15 @@ public class PythonConsolePanel extends JPanel {
           }
         });
 
-    final var exampleCombo = new javax.swing.JComboBox<String>(new String[] {
-      "Select Example...",
-      "adder_chain.py",
-      "advanced_counter.py",
-      "binary_counter.py",
-      "bjt_oscillator.py",
-      "d_flip_flop.py",
-      "extended_library.py",
-      "live_context_example.py",
-      "memory_register.py",
-      "nor_gate_flip_flop.py",
-      "shift_register.py",
-      "simple_counter.py",
-      "sr_latch.py",
-      "t_flip_flop.py",
-      "traffic_light.py"
-    });
-    exampleCombo.setFont(new Font("SansSerif", Font.PLAIN, 11));
-    exampleCombo.addActionListener(e -> {
-      final var selected = (String) exampleCombo.getSelectedItem();
-      if (selected == null || selected.equals("Select Example...")) {
-        return;
-      }
-      final var examplesDir = resolveWorkspaceRoot().resolve("scripts/python/examples");
-      final var exampleFile = examplesDir.resolve(selected).toFile();
-      if (exampleFile.exists()) {
-        scriptPathField.setText(toDisplayPath(exampleFile));
-        try {
-          inputArea.setText(Files.readString(exampleFile.toPath(), StandardCharsets.UTF_8));
-        } catch (IOException ex) {
-          outputArea.append("\n[error] Could not read example script: " + ex.getMessage() + "\n");
-        }
-      }
-    });
-
-    final var comboPanel = new JPanel(new BorderLayout(6, 0));
-    comboPanel.add(new javax.swing.JLabel("Examples:"), BorderLayout.WEST);
-    comboPanel.add(exampleCombo, BorderLayout.CENTER);
-
     final var controls = new JPanel(new BorderLayout(6, 0));
     controls.add(scriptPathField, BorderLayout.CENTER);
     final var runButton = new JButton("Run");
     runButton.addActionListener(e -> runCurrentSnippet());
     controls.add(runButton, BorderLayout.EAST);
 
-    final var controlPanel = new JPanel(new BorderLayout(0, 6));
-    controlPanel.add(comboPanel, BorderLayout.NORTH);
-    controlPanel.add(controls, BorderLayout.SOUTH);
-
     final var editorPanel = new JPanel(new BorderLayout(6, 6));
-    editorPanel.add(new JScrollPane(inputArea), BorderLayout.CENTER);
-    editorPanel.add(controlPanel, BorderLayout.SOUTH);
+    editorPanel.add(inputArea, BorderLayout.CENTER);
+    editorPanel.add(controls, BorderLayout.SOUTH);
 
     final var outputPanel = new JPanel(new BorderLayout());
     outputPanel.add(new JScrollPane(outputArea), BorderLayout.CENTER);
@@ -124,56 +81,62 @@ public class PythonConsolePanel extends JPanel {
   }
 
   private void runCurrentSnippet() {
-    final var pathText = scriptPathField.getText().trim();
-    if (pathText.isBlank()) {
-      outputArea.append("\n[error] No script file linked.\n");
-      return;
+    SwingUtilities.invokeLater(this::runCurrentSnippetNow);
+  }
+
+  void runCurrentSnippetNow() {
+    outputArea.append("\n>>> running script...\n");
+    try {
+      final var scriptFile = resolveScriptFile();
+      if (scriptFile != null && Files.isRegularFile(scriptFile)) {
+        if (runSelectedScript(scriptFile)) {
+          return;
+        }
+      }
+
+      final var tempDir = Files.createTempDirectory("logisim-python-console");
+      final var scriptPath = tempDir.resolve("console_script.py");
+      Files.writeString(scriptPath, inputArea.getText(), StandardCharsets.UTF_8);
+      final var outputFile = resolveOutputFile();
+      final var runner = new PythonCircuitScriptRunner();
+      final var result = runner.runCode(inputArea.getText(), outputFile);
+      outputArea.append(result.output().isBlank() ? "" : result.output());
+      if (result.exitCode() == 0) {
+        outputArea.append("\n[ok] blueprint written to " + outputFile + "\n");
+      } else {
+        outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
+      }
+    } catch (Exception ex) {
+      outputArea.append("\n[error] " + ex.getMessage() + "\n");
+    }
+  }
+
+  private boolean runSelectedScript(Path scriptFile) throws IOException, InterruptedException {
+    final var pythonManager = PythonScriptManager.getInstance();
+    if (project != null) {
+      pythonManager.setActiveProject(project);
+    }
+    pythonManager.initialize();
+    if (pythonManager.isReady()) {
+      outputArea.append("\n>>> executing via embedded Python runtime...\n");
+      final var success = pythonManager.runFile(scriptFile.toFile());
+      if (success) {
+        outputArea.append("\n[ok] embedded script executed: " + scriptFile + "\n");
+        return true;
+      }
+      outputArea.append("\n[error] embedded Python execution failed\n");
+      return false;
     }
 
-    final var file = resolvePath(pathText).toFile();
-    outputArea.append("\n>>> running script: " + file.getName() + "...\n");
-
-    // Run on a background thread so the GUI stays responsive.
-    new Thread(() -> {
-      try {
-        // Write editor content to the linked file so what you see is what runs.
-        final var parent = file.getParentFile();
-        if (parent != null && !parent.exists()) {
-          parent.mkdirs();
-        }
-        Files.writeString(file.toPath(), inputArea.getText(), StandardCharsets.UTF_8);
-
-        // Ensure the embedded Python engine has this project bound.
-        final var mgr = PythonScriptManager.getInstance();
-        mgr.initialize();
-        mgr.setActiveProject(project);
-
-        // Redirect Python stdout/stderr into the output panel.
-        mgr.eval(
-            "import sys\n" +
-            "class _LogisimIO:\n" +
-            "    def write(self, s):\n" +
-            "        logisim.writeOutput(s)\n" +
-            "    def flush(self):\n" +
-            "        pass\n" +
-            "_io = _LogisimIO()\n" +
-            "sys.stdout = _io\n" +
-            "sys.stderr = _io\n"
-        );
-
-        final var success = mgr.runFile(file);
-        SwingUtilities.invokeLater(() -> {
-          if (success) {
-            outputArea.append("\n[ok] script finished.\n");
-          } else {
-            outputArea.append("\n[error] script execution failed — see output above.\n");
-          }
-        });
-      } catch (Exception ex) {
-        SwingUtilities.invokeLater(() ->
-            outputArea.append("\n[error] " + ex.getMessage() + "\n"));
-      }
-    }, "logisim-python-runner").start();
+    final var runner = new PythonCircuitScriptRunner();
+    final var result = runner.runScriptAndCapture(scriptFile.toFile(), null);
+    outputArea.append(result.output().isBlank() ? "" : result.output());
+    if (result.exitCode() == 0) {
+      outputArea.append("\n[ok] script executed: " + scriptFile + "\n");
+    } else {
+      outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
+    }
+    return true;
   }
 
   private void chooseScriptFile() {
@@ -192,12 +155,56 @@ public class PythonConsolePanel extends JPanel {
     scriptPathField.setText(displayPath);
 
     if (selectedFile.isFile() && selectedFile.getName().endsWith(".py")) {
+      loadScriptFileAndRun(selectedFile.toPath());
+      return;
+    }
+  }
+
+  public void loadScriptFileAndRun(Path scriptPath) {
+    if (scriptPath == null) {
+      return;
+    }
+    final var resolved = resolvePath(scriptPath.toString());
+    if (resolved != null) {
+      scriptPathField.setText(toDisplayPath(resolved.toFile()));
+    }
+    if (Files.isRegularFile(resolved)) {
       try {
-        inputArea.setText(Files.readString(selectedFile.toPath(), StandardCharsets.UTF_8));
+        inputArea.setText(Files.readString(resolved, StandardCharsets.UTF_8));
       } catch (IOException ex) {
         outputArea.append("\n[error] could not read selected script: " + ex.getMessage() + "\n");
       }
     }
+    runCurrentSnippet();
+  }
+
+  public void setScriptPath(String pathText) {
+    scriptPathField.setText(pathText == null ? "" : pathText);
+  }
+
+  public void saveLinkedPythonFile() {
+    final var scriptPath = resolveScriptFile();
+    if (scriptPath == null) {
+      return;
+    }
+    try {
+      Files.createDirectories(scriptPath.getParent());
+      Files.writeString(scriptPath, inputArea.getText(), StandardCharsets.UTF_8);
+    } catch (IOException ex) {
+      outputArea.append("\n[error] could not save linked script: " + ex.getMessage() + "\n");
+    }
+  }
+
+  public String getOutputText() {
+    return outputArea.getText();
+  }
+
+  public String getInputText() {
+    return inputArea.getText();
+  }
+
+  public void appendOutput(String text) {
+    outputArea.append(text);
   }
 
   private JFileChooser createScriptChooser() {
@@ -226,14 +233,19 @@ public class PythonConsolePanel extends JPanel {
   }
 
   private Path resolveWorkspaceRoot() {
-    var current = Path.of(System.getProperty("user.dir", ".")).toAbsolutePath();
-    while (current != null) {
-      if (Files.isDirectory(current.resolve("scripts/python"))) {
-        return current.normalize();
-      }
-      current = current.getParent();
+    return Path.of(System.getProperty("user.dir"));
+  }
+
+  private Path resolveScriptFile() {
+    final var pathText = scriptPathField.getText().trim();
+    if (pathText.isBlank()) {
+      return null;
     }
-    return Path.of(System.getProperty("user.dir", "."));
+    final var path = resolvePath(pathText);
+    if (path == null || !Files.isRegularFile(path)) {
+      return null;
+    }
+    return path;
   }
 
   private Path resolvePath(String pathText) {
@@ -259,94 +271,14 @@ public class PythonConsolePanel extends JPanel {
     if (pathText.isBlank()) {
       return null;
     }
-    return resolvePath(pathText).toFile();
-  }
-
-  private void initializeScriptFile() {
-    final var mainFile = project.getLogisimFile().getLoader().getMainFile();
-    if (mainFile == null) {
-      try {
-        final var documentsDir = new File(System.getProperty("user.home"), "Documents");
-        if (!documentsDir.exists()) {
-          documentsDir.mkdirs();
-        }
-        var pyFile = new File(documentsDir, "untitled.py");
-        int counter = 1;
-        while (pyFile.exists()) {
-          pyFile = new File(documentsDir, "untitled_" + counter + ".py");
-          counter++;
-        }
-        pyFile.createNewFile();
-        
-        final var code = LogisimPythonBindings.generatePythonCode(project.getCurrentCircuit());
-        Files.writeString(pyFile.toPath(), code, StandardCharsets.UTF_8);
-        
-        scriptPathField.setText(pyFile.getAbsolutePath().replace('\\', '/'));
-        inputArea.setText(code);
-      } catch (IOException e) {
-        outputArea.append("\n[error] Could not create new python file in Documents: " + e.getMessage() + "\n");
-      }
-    } else {
-      final var circPath = mainFile.getAbsolutePath();
-      final var pyPath = circPath.substring(0, circPath.lastIndexOf('.')) + ".py";
-      final var pyFile = new File(pyPath);
-      scriptPathField.setText(pyPath.replace('\\', '/'));
-      
-      try {
-        if (pyFile.exists()) {
-          inputArea.setText(Files.readString(pyFile.toPath(), StandardCharsets.UTF_8));
-        } else {
-          final var code = LogisimPythonBindings.generatePythonCode(project.getCurrentCircuit());
-          Files.writeString(pyFile.toPath(), code, StandardCharsets.UTF_8);
-          inputArea.setText(code);
-        }
-      } catch (IOException e) {
-        outputArea.append("\n[error] Could not read or create python file: " + e.getMessage() + "\n");
-      }
-    }
-  }
-
-  public void updatePythonCode(com.cburch.logisim.circuit.Circuit circuit) {
-    if (circuit == null) return;
-    final String pyCode = LogisimPythonBindings.generatePythonCode(circuit);
-    SwingUtilities.invokeLater(() -> {
-      inputArea.setText(pyCode);
-    });
-  }
-
-  public void setScriptPath(String path) {
-    if (path != null) {
-      SwingUtilities.invokeLater(() -> {
-        scriptPathField.setText(path.replace('\\', '/'));
-      });
-    }
-  }
-
-  public void saveLinkedPythonFile() {
-    final var pathText = scriptPathField.getText().trim();
-    if (pathText.isBlank()) {
-      return;
-    }
     final var path = resolvePath(pathText);
-    if (path != null) {
-      try {
-        final var parent = path.getParent();
-        if (parent != null) {
-          Files.createDirectories(parent);
-        }
-        Files.writeString(path, inputArea.getText(), StandardCharsets.UTF_8);
-        outputArea.append("\n[ok] Saved Python script to " + path + "\n");
-      } catch (IOException e) {
-        outputArea.append("\n[error] Could not save Python script: " + e.getMessage() + "\n");
-      }
+    if (path == null) {
+      return null;
     }
-  }
-
-  public void appendOutput(String text) {
-    if (text != null) {
-      SwingUtilities.invokeLater(() -> {
-        outputArea.append(text);
-      });
+    if (path.getFileName() != null && path.getFileName().toString().endsWith(".py")) {
+      final var stem = path.getFileName().toString().replaceFirst("\\.py$", "");
+      return path.resolveSibling(stem + "_blueprint.json").toFile();
     }
+    return path.toFile();
   }
 }

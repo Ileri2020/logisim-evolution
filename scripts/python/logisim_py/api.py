@@ -1034,11 +1034,6 @@ class Circuit:
         self._x_cursor: int = 100
         self._y_cursor: int = 100
         self._y_step: int = 60
-        if _is_embedded():
-            try:
-                logisim.ops.clear_circuit()
-            except Exception as exc:
-                print(f"[logisim] failed to clear circuit: {exc}")
 
     def add(self, element: "CircuitElement") -> None:
         """Add a circuit element.
@@ -1060,9 +1055,6 @@ class Circuit:
             ops = logisim.ops  # noqa: F821
             etype = element.type
             gate_type = element.kwargs.get("gate_type", None)
-            x = int(element.kwargs.get("x", self._x_cursor))
-            y = int(element.kwargs.get("y", self._y_cursor))
-            label = element.kwargs.get("label", element.name)
 
             wiring_types = [
                 "splitter", "probe", "tunnel", "pull_resistor", "clock",
@@ -1079,84 +1071,18 @@ class Circuit:
                 "comparator", "maximum", "minimum", "shifter",
                 "bit_adder", "bit_finder"
             ]
-            fp_arith_mappings = {
-                "floating_point_adder": "fpadder",
-                "floating_point_subtractor": "fpsubtractor",
-                "floating_point_multiplier": "fpmultiplier",
-                "floating_point_divider": "fpdivider",
-                "floating_point_comparator": "fpcomparator",
-                "floating_point_negator": "fpnegator",
-                "floating_point_absolute_value": "fpabsolute",
-                "floating_point_square_root": "fpsquareroot",
-                "floating_point_rounder": "fpround",
-                "floating_point_converter": "fptofp",
-                "integer_to_floating_point_converter": "inttofp",
-                "floating_point_to_integer_converter": "fptoint",
-                "floating_point_exponent_extractor": "fpexponentiator",
-                "floating_point_mantissa_extractor": "fpclassificator",
-            }
-            memory_mappings = {
-                "ram": "ram",
-                "rom": "rom",
-                "register": "register",
-                "shift_register": "shift_register",
-                "dual_port_ram": "dual_ram",
-                "counter": "counter",
-            }
-            io_mappings = {
-                "button": "button",
-                "led": "led",
-                "rgb_led": "rgb_led",
-                "seven_segment_display": "seven_segment",
-                "hex_digit_display": "hex_digit",
-                "dot_matrix_display": "dot_matrix",
-                "dip_switch": "dip_switch",
-                "joystick": "joystick",
-                "keyboard": "keyboard",
-                "tty_terminal": "tty",
-            }
-            extra_io_mappings = {
-                "digital_oscilloscope": "digital_oscilloscope",
-                "buzzer": "buzzer",
-                "slider": "slider",
-                "switch": "switch",
-                "pla_rom": "pla_rom",
-            }
 
-            if etype == "wire":
-                source = element.kwargs.get("source")
-                target = element.kwargs.get("target")
-                if source is not None and target is not None:
-                    ops.add_wire(int(source.split(",")[0]), int(source.split(",")[1]), int(target.split(",")[0]), int(target.split(",")[1]))
-                else:
-                    ops.add_wire(x, y, x + 40, y)
-            elif etype == "gate" and gate_type is not None:
-                ops.add_gate(gate_type, x, y, label)
+            if etype == "gate" and gate_type is not None:
+                ops.add_gate(gate_type, self._x_cursor, self._y_cursor, element.name)
             elif etype == "pin":
                 is_input = element.kwargs.get("is_input", True)
-                ops.add_pin(x, y, is_input, label)
+                ops.add_pin(self._x_cursor, self._y_cursor, is_input, element.name)
             elif etype in wiring_types:
-                ops.add_wiring(etype, x, y)
+                ops.add_wiring(etype, self._x_cursor, self._y_cursor)
             elif etype in plexer_types:
-                ops.add_plexer(etype, x, y)
+                ops.add_plexer(etype, self._x_cursor, self._y_cursor)
             elif etype in arith_types:
-                ops.add_arith(etype, x, y)
-            elif etype in fp_arith_mappings:
-                ops.add_fp_arith(fp_arith_mappings[etype], x, y)
-            elif etype in memory_mappings:
-                ops.add_memory(memory_mappings[etype], x, y)
-            elif etype in io_mappings:
-                ops.add_io(io_mappings[etype], x, y)
-            elif etype.startswith("ttl_"):
-                ops.add_ttl(etype.replace("ttl_", ""), x, y)
-            elif etype == "tcl":
-                ops.add_tcl("tcl_generic", x, y)
-            elif etype == "bfh_mega_function":
-                ops.add_bfh("bin_to_bcd", x, y)
-            elif etype in extra_io_mappings:
-                ops.add_extra_io(extra_io_mappings[etype], x, y)
-            elif etype == "system_on_chip":
-                ops.add_soc("nios2", x, y)
+                ops.add_arith(etype, self._x_cursor, self._y_cursor)
             else:
                 # For component types not yet individually wired up, emit a debug note.
                 print(f"[logisim] embedded placement not yet supported for type '{etype}' "

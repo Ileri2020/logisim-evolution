@@ -219,11 +219,6 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     topTab.add(explPanel);
     topTab.add(simPanel);
     topTab.add(pythonConsolePanel);
-    topTab.addChangeListener(e -> {
-      if (topTab.getSelectedComponent() == pythonConsolePanel) {
-        pythonConsolePanel.updatePythonCode(project.getCurrentCircuit());
-      }
-    });
 
     final var attrFooter = new JPanel(new BorderLayout());
     attrFooter.add(zoom);
@@ -264,13 +259,7 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     KeyboardToolSelection.register(toolbar);
 
     PythonContextRegistry.get().bind(project, this);
-    // Ensure embedded Python manager knows about the active project/design tab.
-    try {
-      com.cburch.logisim.scripting.PythonScriptManager.getInstance().setActiveProject(project);
-      com.cburch.logisim.scripting.PythonScriptManager.getInstance().eval("f = globals().get('on_design_update')\nif callable(f):\n  f()\n");
-    } catch (Throwable ignored) {
-      // Ignore failures here; scripting may be disabled in some environments.
-    }
+    PythonScriptManager.getInstance().setActiveProject(project);
     project.setFrame(this);
     if (project.getTool() == null) {
       project.setTool(project.getOptions().getToolbarData().getFirstTool());
@@ -713,10 +702,6 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
     return vhdlSimulatorConsole;
   }
 
-  public PythonConsolePanel getPythonConsolePanel() {
-    return pythonConsolePanel;
-  }
-
   public ZoomModel getZoomModel() {
     return layoutZoomModel;
   }
@@ -963,15 +948,6 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
       if (event.getAction() == CircuitEvent.ACTION_SET_NAME) {
         buildTitleString();
       }
-      if (pythonConsolePanel != null) {
-        pythonConsolePanel.updatePythonCode(event.getCircuit());
-      }
-      // Forward any circuit changes to the embedded Python manager so scripts
-      // that define `on_design_update()` are invoked automatically.
-      try {
-          com.cburch.logisim.scripting.PythonScriptManager.getInstance().eval("f = globals().get('on_design_update')\nif callable(f):\n  f()\n");
-      } catch (Throwable ignored) {
-      }
     }
 
     private void enableSave() {
@@ -1017,15 +993,6 @@ public class Frame extends LFrame.MainWindow implements LocaleListener {
             appearance.setCircuit(project, project.getCircuitState());
           }
           viewAttributes(project.getTool());
-          if (pythonConsolePanel != null) {
-            pythonConsolePanel.updatePythonCode(circuit);
-          }
-          // Inform embedded scripting manager of the newly selected circuit/project.
-          try {
-            com.cburch.logisim.scripting.PythonScriptManager.getInstance().setActiveProject(project);
-            com.cburch.logisim.scripting.PythonScriptManager.getInstance().eval("f = globals().get('on_design_update')\nif callable(f):\n  f()\n");
-          } catch (Throwable ignored) {
-          }
         } else if (event.getData() instanceof HdlModel model) {
           setHdlEditorView(model);
           viewCircuitAttributes();

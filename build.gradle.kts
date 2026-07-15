@@ -47,11 +47,14 @@ dependencies {
   implementation("commons-cli:commons-cli:1.11.0")
   implementation("com.vladsch.flexmark:flexmark-all:0.64.8")
   implementation("org.apache.commons:commons-text:1.15.0")
-  // GraalVM Python integration: included in distribution
-  // Use the polyglot API directly so the scripting sources compile without
-  // pulling in the Graal Python runtime artifacts that can break shadowJar.
-  implementation("org.graalvm.polyglot:polyglot:24.1.2")
-  testImplementation("org.graalvm.polyglot:polyglot:24.1.2")
+  // GraalVM Python integration: compile-only so code compiles but native
+  // Graal artifacts are not bundled into the shadow jar. Runtime native
+  // Graal libraries should be provided by packagers or the host system.
+  // Provide GraalVM polyglot API at compile time so the scripting sources compile.
+  // We avoid packaging the Graal Python runtime (native artifacts) in the
+  // shadow jar; packagers should provide the runtime separately.
+  compileOnly("org.graalvm.sdk:graal-sdk:24.1.2")
+  testImplementation("org.graalvm.sdk:graal-sdk:24.1.2")
 
   // NOTE: Be aware of reported issues with Eclipse and Batik
   // See: https://github.com/logisim-evolution/logisim-evolution/issues/709

@@ -10,8 +10,11 @@
 package com.cburch.logisim.scripting;
 
 import com.cburch.logisim.proj.Project;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.graalvm.polyglot.Context;
@@ -178,8 +181,15 @@ public class PythonScriptManager implements AutoCloseable {
       logger.error("Script file not found: {}", scriptFile);
       return false;
     }
+
+    final var outputBuffer = new ByteArrayOutputStream();
+    final var captureStream = new PrintStream(outputBuffer, true, StandardCharsets.UTF_8);
+    final var originalOut = System.out;
+    final var originalErr = System.err;
     try {
       logger.info("Running embedded Python script: {}", scriptFile.getAbsolutePath());
+      System.setOut(captureStream);
+      System.setErr(captureStream);
 
       // Add the script's own directory to sys.path.
       final var scriptDir = scriptFile.getParentFile().getAbsolutePath().replace("\\", "\\\\");
@@ -215,6 +225,7 @@ public class PythonScriptManager implements AutoCloseable {
           Source.newBuilder(PYTHON, scriptFile).mimeType("text/x-python").build();
       polyglotContext.eval(src);
       logger.info("Script completed successfully: {}", scriptFile.getName());
+      flushCapturedOutput(outputBuffer);
       return true;
     } catch (PolyglotException e) {
       final var errText = "\nTraceback (most recent call):\n  File \"" + scriptFile.getName() + "\", line " + 
@@ -224,6 +235,7 @@ public class PythonScriptManager implements AutoCloseable {
       if (bindings != null) {
         bindings.writeOutput(errText);
       }
+      flushCapturedOutput(outputBuffer);
       return false;
     } catch (IOException e) {
       final var errText = "\n[error] Could not read script file: " + e.getMessage() + "\n";
@@ -231,7 +243,22 @@ public class PythonScriptManager implements AutoCloseable {
       if (bindings != null) {
         bindings.writeOutput(errText);
       }
+      flushCapturedOutput(outputBuffer);
       return false;
+    } finally {
+      System.setOut(originalOut);
+      System.setErr(originalErr);
+      captureStream.close();
+    }
+  }
+
+  private void flushCapturedOutput(ByteArrayOutputStream outputBuffer) {
+    if (outputBuffer == null) {
+      return;
+    }
+    final var outputText = outputBuffer.toString(StandardCharsets.UTF_8);
+    if (outputText != null && !outputText.isBlank() && bindings != null) {
+      bindings.writeOutput(outputText);
     }
   }
 
