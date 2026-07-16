@@ -289,6 +289,28 @@ object func {
     }
   }
 
+  /** Helper function to copy a directory recursively. */
+  fun copyDirectory(from: String, to: String) {
+    try {
+      val sourcePath = Paths.get(from)
+      val destinationPath = Paths.get(to)
+      if (!Files.exists(sourcePath)) return
+      Files.walk(sourcePath).forEach { src ->
+        val dest = destinationPath.resolve(sourcePath.relativize(src).toString())
+        if (Files.isDirectory(src)) {
+          if (!Files.exists(dest)) {
+            Files.createDirectories(dest)
+          }
+        } else {
+          Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING)
+        }
+      }
+    } catch (ex: Exception) {
+      logger.error(ex.message)
+      throw GradleException("Failed to copy directory from ${from} to ${to}")
+    }
+  }
+
   /**
    * Helper function to verify the distribution file now exists in build/dist.
    * It issues a warning if it does not and also lists the contents of its directory.
@@ -388,6 +410,9 @@ tasks.register("createPackageInput") {
   doLast {
     func.deleteDirectoryContents(packageInputDir)
     func.copyFile("${libsDir}/${shadowJarFilename}", "${packageInputDir}/${shadowJarFilename}")
+    val pythonSourceDir = "${projectDir}/scripts/python"
+    val pythonDestDir = "${packageInputDir}/scripts/python"
+    func.copyDirectory(pythonSourceDir, pythonDestDir)
   }
 }
 

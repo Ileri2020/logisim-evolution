@@ -126,7 +126,26 @@ public class PythonCircuitScriptRunner {
       }
       return configuredPath;
     }
-    return getAppHome().resolve("scripts/python").toString();
+
+    final var appHome = getAppHome();
+    final var candidates = List.of(
+        appHome.resolve("scripts/python"),
+        appHome.getParent() != null ? appHome.getParent().resolve("scripts/python") : null,
+        appHome.getParent() != null && appHome.getParent().getParent() != null
+            ? appHome.getParent().getParent().resolve("scripts/python")
+            : null,
+        appHome.resolve("..\scripts/python"),
+        appHome.resolve("..\..\scripts/python")
+    );
+
+    for (final var candidate : candidates) {
+      if (candidate != null && Files.exists(candidate)) {
+        return candidate.toString();
+      }
+    }
+
+    // Fall back to relative path in case the package layout differs.
+    return "scripts/python";
   }
 
   private Path getAppHome() {
