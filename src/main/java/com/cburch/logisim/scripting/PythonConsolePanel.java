@@ -102,6 +102,36 @@ public class PythonConsolePanel extends JPanel {
     });
   }
 
+  public void setScriptPath(String scriptPath) {
+    if (scriptPath == null || scriptPath.isBlank()) {
+      return;
+    }
+    scriptPathField.setText(scriptPath.replace('\\', '/'));
+  }
+
+  public void saveLinkedPythonFile() {
+    final var targetPath = resolvePath(scriptPathField.getText().trim());
+    if (targetPath == null) {
+      return;
+    }
+    try {
+      final var parentDir = targetPath.getParent();
+      if (parentDir != null) {
+        Files.createDirectories(parentDir);
+      }
+      Files.writeString(targetPath, inputArea.getText(), StandardCharsets.UTF_8);
+      outputArea.append("\n[saved] linked Python file: " + targetPath + "\n");
+    } catch (IOException ex) {
+      outputArea.append("\n[error] could not save linked Python file: " + ex.getMessage() + "\n");
+    }
+  }
+
+  public void appendOutput(String text) {
+    if (text != null && !text.isBlank()) {
+      outputArea.append(text);
+    }
+  }
+
   private void chooseScriptFile() {
     final var chooser = createScriptChooser();
     final var choice = chooser.showOpenDialog(this);
@@ -156,6 +186,9 @@ public class PythonConsolePanel extends JPanel {
   }
 
   private Path resolvePath(String pathText) {
+    if (pathText == null || pathText.isBlank()) {
+      return null;
+    }
     final var path = Path.of(pathText);
     if (path.isAbsolute()) {
       return path;
