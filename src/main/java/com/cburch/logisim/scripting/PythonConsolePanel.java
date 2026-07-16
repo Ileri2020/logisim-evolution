@@ -81,62 +81,25 @@ public class PythonConsolePanel extends JPanel {
   }
 
   private void runCurrentSnippet() {
-    SwingUtilities.invokeLater(this::runCurrentSnippetNow);
-  }
-
-  void runCurrentSnippetNow() {
-    outputArea.append("\n>>> running script...\n");
-    try {
-      final var scriptFile = resolveScriptFile();
-      if (scriptFile != null && Files.isRegularFile(scriptFile)) {
-        if (runSelectedScript(scriptFile)) {
-          return;
+    SwingUtilities.invokeLater(() -> {
+      outputArea.append("\n>>> running snippet...\n");
+      try {
+        final var tempDir = Files.createTempDirectory("logisim-python-console");
+        final var scriptPath = tempDir.resolve("console_script.py");
+        Files.writeString(scriptPath, inputArea.getText(), StandardCharsets.UTF_8);
+        final var outputFile = resolveOutputFile();
+        final var runner = new PythonCircuitScriptRunner();
+        final var result = runner.runCode(inputArea.getText(), outputFile);
+        outputArea.append(result.output().isBlank() ? "" : result.output());
+        if (result.exitCode() == 0) {
+          outputArea.append("\n[ok] blueprint written to " + outputFile + "\n");
+        } else {
+          outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
         }
+      } catch (Exception ex) {
+        outputArea.append("\n[error] " + ex.getMessage() + "\n");
       }
-
-      final var tempDir = Files.createTempDirectory("logisim-python-console");
-      final var scriptPath = tempDir.resolve("console_script.py");
-      Files.writeString(scriptPath, inputArea.getText(), StandardCharsets.UTF_8);
-      final var outputFile = resolveOutputFile();
-      final var runner = new PythonCircuitScriptRunner();
-      final var result = runner.runCode(inputArea.getText(), outputFile);
-      outputArea.append(result.output().isBlank() ? "" : result.output());
-      if (result.exitCode() == 0) {
-        outputArea.append("\n[ok] blueprint written to " + outputFile + "\n");
-      } else {
-        outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
-      }
-    } catch (Exception ex) {
-      outputArea.append("\n[error] " + ex.getMessage() + "\n");
-    }
-  }
-
-  private boolean runSelectedScript(Path scriptFile) throws IOException, InterruptedException {
-    final var pythonManager = PythonScriptManager.getInstance();
-    if (project != null) {
-      pythonManager.setActiveProject(project);
-    }
-    pythonManager.initialize();
-    if (pythonManager.isReady()) {
-      outputArea.append("\n>>> executing via embedded Python runtime...\n");
-      final var success = pythonManager.runFile(scriptFile.toFile());
-      if (success) {
-        outputArea.append("\n[ok] embedded script executed: " + scriptFile + "\n");
-        return true;
-      }
-      outputArea.append("\n[error] embedded Python execution failed\n");
-      return false;
-    }
-
-    final var runner = new PythonCircuitScriptRunner();
-    final var result = runner.runScriptAndCapture(scriptFile.toFile(), null);
-    outputArea.append(result.output().isBlank() ? "" : result.output());
-    if (result.exitCode() == 0) {
-      outputArea.append("\n[ok] script executed: " + scriptFile + "\n");
-    } else {
-      outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
-    }
-    return true;
+    });
   }
 
   private void chooseScriptFile() {
@@ -155,56 +118,12 @@ public class PythonConsolePanel extends JPanel {
     scriptPathField.setText(displayPath);
 
     if (selectedFile.isFile() && selectedFile.getName().endsWith(".py")) {
-      loadScriptFileAndRun(selectedFile.toPath());
-      return;
-    }
-  }
-
-  public void loadScriptFileAndRun(Path scriptPath) {
-    if (scriptPath == null) {
-      return;
-    }
-    final var resolved = resolvePath(scriptPath.toString());
-    if (resolved != null) {
-      scriptPathField.setText(toDisplayPath(resolved.toFile()));
-    }
-    if (Files.isRegularFile(resolved)) {
       try {
-        inputArea.setText(Files.readString(resolved, StandardCharsets.UTF_8));
+        inputArea.setText(Files.readString(selectedFile.toPath(), StandardCharsets.UTF_8));
       } catch (IOException ex) {
         outputArea.append("\n[error] could not read selected script: " + ex.getMessage() + "\n");
       }
     }
-    runCurrentSnippet();
-  }
-
-  public void setScriptPath(String pathText) {
-    scriptPathField.setText(pathText == null ? "" : pathText);
-  }
-
-  public void saveLinkedPythonFile() {
-    final var scriptPath = resolveScriptFile();
-    if (scriptPath == null) {
-      return;
-    }
-    try {
-      Files.createDirectories(scriptPath.getParent());
-      Files.writeString(scriptPath, inputArea.getText(), StandardCharsets.UTF_8);
-    } catch (IOException ex) {
-      outputArea.append("\n[error] could not save linked script: " + ex.getMessage() + "\n");
-    }
-  }
-
-  public String getOutputText() {
-    return outputArea.getText();
-  }
-
-  public String getInputText() {
-    return inputArea.getText();
-  }
-
-  public void appendOutput(String text) {
-    outputArea.append(text);
   }
 
   private JFileChooser createScriptChooser() {
@@ -236,18 +155,6 @@ public class PythonConsolePanel extends JPanel {
     return Path.of(System.getProperty("user.dir"));
   }
 
-  private Path resolveScriptFile() {
-    final var pathText = scriptPathField.getText().trim();
-    if (pathText.isBlank()) {
-      return null;
-    }
-    final var path = resolvePath(pathText);
-    if (path == null || !Files.isRegularFile(path)) {
-      return null;
-    }
-    return path;
-  }
-
   private Path resolvePath(String pathText) {
     final var path = Path.of(pathText);
     if (path.isAbsolute()) {
@@ -271,14 +178,6 @@ public class PythonConsolePanel extends JPanel {
     if (pathText.isBlank()) {
       return null;
     }
-    final var path = resolvePath(pathText);
-    if (path == null) {
-      return null;
-    }
-    if (path.getFileName() != null && path.getFileName().toString().endsWith(".py")) {
-      final var stem = path.getFileName().toString().replaceFirst("\\.py$", "");
-      return path.resolveSibling(stem + "_blueprint.json").toFile();
-    }
-    return path.toFile();
+    return resolvePath(pathText).toFile();
   }
 }

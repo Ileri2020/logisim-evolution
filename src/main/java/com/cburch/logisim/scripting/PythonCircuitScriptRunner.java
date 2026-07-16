@@ -103,7 +103,7 @@ public class PythonCircuitScriptRunner {
   }
 
   private void configureEnvironment(java.util.Map<String, String> environment, Path contextPath) {
-    final var pythonPath = System.getProperty("logisim.python.path", "scripts/python");
+    final var pythonPath = resolvePythonPath();
     final var currentPath = environment.getOrDefault("PYTHONPATH", "");
     final var newPath = currentPath.isBlank() ? pythonPath : currentPath + File.pathSeparator + pythonPath;
     environment.put("PYTHONPATH", newPath);
@@ -111,6 +111,39 @@ public class PythonCircuitScriptRunner {
     if (contextPath != null) {
       environment.put("LOGISIM_CONTEXT_PATH", contextPath.toString());
     }
+  }
+
+  private String resolvePythonPath() {
+    final var configuredPath = System.getProperty("logisim.python.path");
+    if (configuredPath != null && !configuredPath.isBlank()) {
+      final var configured = Path.of(configuredPath);
+      if (configured.isAbsolute()) {
+        return configured.toString();
+      }
+      final var resolved = getAppHome().resolve(configured);
+      if (Files.exists(resolved)) {
+        return resolved.toString();
+      }
+      return configuredPath;
+    }
+    return getAppHome().resolve("scripts/python").toString();
+  }
+
+  private Path getAppHome() {
+    try {
+      final var codeSource = PythonCircuitScriptRunner.class
+          .getProtectionDomain()
+          .getCodeSource();
+      if (codeSource != null && codeSource.getLocation() != null) {
+        final var jarPath = Path.of(codeSource.getLocation().toURI()).toAbsolutePath();
+        final var parentDir = jarPath.getParent();
+        if (parentDir != null) {
+          return parentDir;
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return Path.of(System.getProperty("user.dir"));
   }
 
   private String resolvePythonExecutable() {
