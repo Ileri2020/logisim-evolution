@@ -228,134 +228,131 @@ tasks.register<Jar>("sourcesJar") {
   archiveVersion.set(ext.get(APP_VERSION) as String)
 }
 
-object func {
-  val logger: Logger = Logging.getLogger("BuildUtils")
+val buildLogger: Logger = Logging.getLogger("BuildUtils")
 
-  /**
-   * Helper method that simplifies running external commands using ProcessBuilder().
-   * Will throw GradleException on command failure (non-zero return code).
-   *
-   * params: List of strings which signifies the external program file to be invoked and its arguments (if any).
-   * exMsg: Optional error message to be used with thrown exception on failure.
-   *
-   * Returns content of invoked app's stdout
-   */
-  fun runCommand(params: List<String>, exceptionMsg: String): String {
-    val procBuilder = ProcessBuilder()
-    procBuilder
-      .redirectOutput(ProcessBuilder.Redirect.PIPE)
-      .redirectError(ProcessBuilder.Redirect.PIPE)
-      .command(params)
-    val proc = procBuilder.start()
+/**
+ * Helper method that simplifies running external commands using ProcessBuilder().
+ * Will throw GradleException on command failure (non-zero return code).
+ *
+ * params: List of strings which signifies the external program file to be invoked and its arguments (if any).
+ * exMsg: Optional error message to be used with thrown exception on failure.
+ *
+ * Returns content of invoked app's stdout
+ */
+fun runCommand(params: List<String>, exceptionMsg: String): String {
+  val procBuilder = ProcessBuilder()
+  procBuilder
+    .redirectOutput(ProcessBuilder.Redirect.PIPE)
+    .redirectError(ProcessBuilder.Redirect.PIPE)
+    .command(params)
+  val proc = procBuilder.start()
 
-    logger.debug("EXECUTING CMD: " + params.joinToString(" "))
+  buildLogger.debug("EXECUTING CMD: " + params.joinToString(" "))
 
-    var rc = -1
-    try {
-      rc = proc.waitFor()
-      logger.debug("CMD COMPLETED. RC: ${rc}")
-    } catch (ex: Exception) {
-      logger.error(ex.message)
-      logger.error(ex.stackTraceToString())
-    }
-
-    if (rc != 0) {
-      logger.error(proc.errorStream.bufferedReader().readText().trim())
-      logger.error("Command \"${params[0]}\" failed with RC ${rc}.")
-      throw GradleException(exceptionMsg)
-    }
-
-    return proc.inputStream.bufferedReader().readText().trim()
+  var rc = -1
+  try {
+    rc = proc.waitFor()
+    buildLogger.debug("CMD COMPLETED. RC: ${rc}")
+  } catch (ex: Exception) {
+    buildLogger.error(ex.message)
+    buildLogger.error(ex.stackTraceToString())
   }
 
-  /** Helper function to remove all contents from the given directory */
-  fun deleteDirectoryContents(directory: String) {
-    val dir = File(directory)
-    if (!dir.isDirectory) {
-      throw GradleException("Cannot remove contents of ${directory}")
+  if (rc != 0) {
+    buildLogger.error(proc.errorStream.bufferedReader().readText().trim())
+    buildLogger.error("Command \"${params[0]}\" failed with RC ${rc}.")
+    throw GradleException(exceptionMsg)
+  }
+
+  return proc.inputStream.bufferedReader().readText().trim()
+}
+
+/** Helper function to remove all contents from the given directory */
+fun deleteDirectoryContents(directory: String) {
+  val dir = File(directory)
+  if (!dir.isDirectory) {
+    throw GradleException("Cannot remove contents of ${directory}")
+  }
+  val dirList = dir.list()
+  if (dirList == null) return
+  for (file in dirList) {
+    val filename = "${directory}/$file"
+    val theFile = File(filename)
+    if (theFile.isDirectory()) {
+      deleteDirectoryContents(filename)
     }
-    val dirList = File(directory).list()
+    if (!theFile.delete()) {
+      throw GradleException("Could not delete ${filename}")
+    }
+  }
+}
+
+/** Helper function to copy a file from a source location to a destination */
+fun copyFile(from: String, to: String) {
+  try {
+    Files.copy(Paths.get(from), Paths.get(to), StandardCopyOption.REPLACE_EXISTING)
+  } catch (ex: Exception) {
+    buildLogger.error(ex.message)
+    throw GradleException("Failed to copy file from ${from} to ${to}")
+  }
+}
+
+/** Helper function to copy a directory recursively. */
+fun copyDirectory(from: String, to: String) {
+  try {
+    val sourcePath = Paths.get(from)
+    val destinationPath = Paths.get(to)
+    if (!Files.exists(sourcePath)) return
+    Files.walk(sourcePath).forEach { src ->
+      val dest = destinationPath.resolve(sourcePath.relativize(src).toString())
+      if (Files.isDirectory(src)) {
+        if (!Files.exists(dest)) {
+          Files.createDirectories(dest)
+        }
+      } else {
+        Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING)
+      }
+    }
+  } catch (ex: Exception) {
+    buildLogger.error(ex.message)
+    throw GradleException("Failed to copy directory from ${from} to ${to}")
+  }
+}
+
+/**
+ * Helper function to verify the distribution file now exists in build/dist.
+ * It issues a warning if it does not and also lists the contents of its directory.
+ */
+fun verifyFileExists(filename: String) {
+  val theFile = File(filename)
+  if (theFile.isFile) {
+    return
+  }
+  buildLogger.warn("*** WARNING ***")
+  buildLogger.warn("File does not exist: ${filename}")
+  val parentDir = theFile.parentFile
+  if (parentDir != null && parentDir.isDirectory) {
+    buildLogger.warn("Directory actually contains:")
+    val dirList = parentDir.list()
     if (dirList == null) return
     for (file in dirList) {
-      val filename = "${directory}/$file"
-      val theFile = File(filename)
-      if (theFile.isDirectory()) {
-        deleteDirectoryContents(filename)
-      }
-      if (!theFile.delete()) {
-        throw GradleException("Could not delete ${filename}")
-      }
+      buildLogger.warn("  ${file}")
     }
+  } else {
+    buildLogger.warn("Parent directory does not exist: ${parentDir}")
   }
+}
 
-  /** Helper function to copy a file from a source location to a destination */
-  fun copyFile(from: String, to:String) {
-    try {
-      Files.copy(Paths.get(from), Paths.get(to), StandardCopyOption.REPLACE_EXISTING)
-    } catch (ex: Exception) {
-      logger.error(ex.message)
-      throw GradleException("Failed to copy file from ${from} to ${to}")
-    }
+/**
+ * Function that returns the named parameters list plus the --adds-modules option
+ */
+fun getNeededModules(fileName: String): List<String> {
+  val file = File(fileName)
+  if (!file.isFile()) {
+    throw GradleException("No ${fileName} exists")
   }
-
-  /** Helper function to copy a directory recursively. */
-  fun copyDirectory(from: String, to: String) {
-    try {
-      val sourcePath = Paths.get(from)
-      val destinationPath = Paths.get(to)
-      if (!Files.exists(sourcePath)) return
-      Files.walk(sourcePath).forEach { src ->
-        val dest = destinationPath.resolve(sourcePath.relativize(src).toString())
-        if (Files.isDirectory(src)) {
-          if (!Files.exists(dest)) {
-            Files.createDirectories(dest)
-          }
-        } else {
-          Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING)
-        }
-      }
-    } catch (ex: Exception) {
-      logger.error(ex.message)
-      throw GradleException("Failed to copy directory from ${from} to ${to}")
-    }
-  }
-
-  /**
-   * Helper function to verify the distribution file now exists in build/dist.
-   * It issues a warning if it does not and also lists the contents of its directory.
-   */
-  fun verifyFileExists(filename: String) {
-    val theFile = File(filename)
-    if (theFile.isFile()) {
-      return
-    }
-    logger.warn("*** WARNING ***");
-    logger.warn("File does not exist: ${filename}")
-    val parentDir = theFile.getParentFile();
-    if (parentDir != null && parentDir.isDirectory()) {
-      logger.warn("Directory actually contains:")
-      val dirList = parentDir.list()
-      if (dirList == null) return;
-      for (file in dirList) {
-        logger.warn("  ${file}")
-      }
-    } else {
-      logger.warn("Parent directory does not exist: ${parentDir}");
-    }
-  }
-
-  /**
-   * Function that returns the named parameters list plus the --adds-modules option
-   */
-  fun getNeededModules(fileName: String): List<String> {
-    val file = File(fileName)
-    if (!file.isFile()) {
-      throw GradleException("No ${fileName} exists")
-    }
-    val dependencies = File(fileName).readLines()[0]
-    return listOf("--add-modules", dependencies)
-    // return (ext.get(parametersName) as List<Any?>).filterIsInstance<String>() + addModules
-  }
+  val dependencies = file.readLines()[0]
+  return listOf("--add-modules", dependencies)
 }
 
 /**
@@ -392,9 +389,9 @@ tasks.register("createNeededJavaModules") {
   outputs.file(outFileName)
 
   doLast {
-    val neededJavaModules = func.runCommand(cmd, "Error while finding Java dependencies with jdeps.").trim()
+    val neededJavaModules = runCommand(cmd, "Error while finding Java dependencies with jdeps.").trim()
     File(outFileName).writeText(neededJavaModules)
-    func.verifyFileExists(outFileName)
+    verifyFileExists(outFileName)
   }
 }
 
@@ -420,9 +417,9 @@ tasks.register("createPackageInput") {
   outputs.dir(packageInputDir)
 
   doLast {
-    func.deleteDirectoryContents(packageInputDir)
-    func.copyFile("${libsDir}/${shadowJarFilename}", "${packageInputDir}/${shadowJarFilename}")
-    func.copyDirectory(pythonSourceDir, pythonDestDir)
+    deleteDirectoryContents(packageInputDir)
+    copyFile("${libsDir}/${shadowJarFilename}", "${packageInputDir}/${shadowJarFilename}")
+    copyDirectory(pythonSourceDir, pythonDestDir)
   }
 }
 
@@ -464,9 +461,9 @@ tasks.register("createDeb") {
   }
 
   doLast {
-    val params = linuxParams + func.getNeededModules(jdepsFile) + listOf("--type", "deb")
-    func.runCommand(params, "Error while creating the DEB package.")
-    func.verifyFileExists(outputFile);
+    val params = linuxParams + getNeededModules(jdepsFile) + listOf("--type", "deb")
+    runCommand(params, "Error while creating the DEB package.")
+    verifyFileExists(outputFile);
   }
 }
 
@@ -503,9 +500,9 @@ tasks.register("createRpm") {
   }
 
   doLast {
-    val params = linuxParams + func.getNeededModules(jdepsFile) + listOf("--type", "rpm")
-    func.runCommand(params, "Error while creating the RPM package.")
-    func.verifyFileExists(outputFile);
+    val params = linuxParams + getNeededModules(jdepsFile) + listOf("--type", "rpm")
+    runCommand(params, "Error while creating the RPM package.")
+    verifyFileExists(outputFile);
   }
 }
 
@@ -542,7 +539,7 @@ tasks.register("createMsi") {
   doLast {
     val graalRuntimeImage = ext.get(GRAAL_RUNTIME_IMAGE) as String?
     val runtimeParams = if (graalRuntimeImage != null) listOf("--runtime-image", graalRuntimeImage) else emptyList()
-    val params = sharedParams + func.getNeededModules(jdepsFile) + runtimeParams + listOf(
+    val params = sharedParams + getNeededModules(jdepsFile) + runtimeParams + listOf(
         "--name", projectName,
         "--dest", targetDir,
         "--icon", "${supportDir}/windows/Logisim-evolution.ico",
@@ -555,12 +552,12 @@ tasks.register("createMsi") {
         // NOTE: any change to version **format** may require editing of .github/workflows/nightly.yml too!
         "--app-version", version,
     )
-    func.runCommand(params, "Error while creating the MSI package.")
+    runCommand(params, "Error while creating the MSI package.")
     val fromFile = "${targetDir}/${projectName}-${version}.msi"
     val toFile = "${targetDir}/${projectName}-${version}-${osArch}.msi"
-    func.copyFile(fromFile, toFile)
+    copyFile(fromFile, toFile)
     File(fromFile).delete()
-    func.verifyFileExists(outputFile);
+    verifyFileExists(outputFile);
   }
 }
 
@@ -597,10 +594,10 @@ tasks.register("createExe") {
   }
 
   doLast {
-    func.deleteDirectoryContents(dest)
+    deleteDirectoryContents(dest)
     val graalRuntimeImage = ext.get(GRAAL_RUNTIME_IMAGE) as String?
     val runtimeParams = if (graalRuntimeImage != null) listOf("--runtime-image", graalRuntimeImage) else emptyList()
-    val params = sharedParams + func.getNeededModules(jdepsFile) + runtimeParams + listOf(
+    val params = sharedParams + getNeededModules(jdepsFile) + runtimeParams + listOf(
         "--name", projectName,
         "--dest", dest,
         "--icon", "${supportDir}/windows/Logisim-evolution.ico",
@@ -610,8 +607,8 @@ tasks.register("createExe") {
         // NOTE: any change to version **format** may require editing of .github/workflows/nightly.yml too!
         "--app-version", version,
     )
-    func.runCommand(params, "Error while creating the Windows executable.")
-    func.verifyFileExists("${dest}/${projectName}/${projectName}.exe")
+    runCommand(params, "Error while creating the Windows executable.")
+    verifyFileExists("${dest}/${projectName}/${projectName}.exe")
   }
 }
 
@@ -670,10 +667,10 @@ tasks.register("createApp") {
   }
 
   doLast {
-    func.deleteDirectoryContents(dest)
+    deleteDirectoryContents(dest)
     val graalRuntimeImage = ext.get(GRAAL_RUNTIME_IMAGE) as String?
     val runtimeParams = if (graalRuntimeImage != null) listOf("--runtime-image", graalRuntimeImage) else emptyList()
-    val params = sharedParams + func.getNeededModules(jdepsFile) + runtimeParams + listOf(
+    val params = sharedParams + getNeededModules(jdepsFile) + runtimeParams + listOf(
         "--dest", dest,
         "--name", projectName,
         "--file-associations", "${supportDir}/macos/file.jpackage",
@@ -683,12 +680,12 @@ tasks.register("createApp") {
         "--type", "app-image",
         "--mac-app-category", "education"
     )
-    func.runCommand(params, "Error while creating the .app directory.")
+    runCommand(params, "Error while creating the .app directory.")
 
     if ("x86_64".equals(arch)) {
       val pListFilename = "${appDirName}/Contents/Info.plist"
       val tempPList = "${dest}/Info.plist"
-      func.runCommand(listOf(
+      runCommand(listOf(
           "awk",
           "{print >\"${tempPList}\"};"
               + "/NSHighResolutionCapable/{"
@@ -698,11 +695,11 @@ tasks.register("createApp") {
           pListFilename,
       ), "Error while patching Info.plist file.")
 
-      func.runCommand(listOf(
+      runCommand(listOf(
           "mv", tempPList, pListFilename
       ), "Error while moving Info.plist into the .app directory.")
 
-      func.runCommand(listOf(
+      runCommand(listOf(
           "codesign", "--force", "--sign", "-", appDirName
       ), "Error while executing: codesign")
     }
@@ -746,12 +743,12 @@ tasks.register("createDmg") {
         "--dest", targetDir,
         "--type", "dmg",
       )
-    func.runCommand(params, "Error while creating the DMG package")
+    runCommand(params, "Error while creating the DMG package")
     val fromFile = "${targetDir}/${projectName}-${appVersion}.dmg"
     val toFile = "${outputFile}"
-    func.copyFile(fromFile, toFile)
+    copyFile(fromFile, toFile)
     File(fromFile).delete()
-    func.verifyFileExists(outputFile);
+    verifyFileExists(outputFile);
   }
 }
 
@@ -789,9 +786,9 @@ tasks.register("genBuildInfo") {
     var buildId = "(Not built from Git repo)";
     if (File("${projectDir}/.git").exists()) {
       var errMsg = "Failed getting branch name."
-      branchName = func.runCommand(listOf("git", "-C", projectDir, "rev-parse", "--abbrev-ref", "HEAD"), errMsg)
+      branchName = runCommand(listOf("git", "-C", projectDir, "rev-parse", "--abbrev-ref", "HEAD"), errMsg)
       errMsg = "Failed getting last commit hash."
-      branchLastCommitHash = func.runCommand(listOf("git", "-C", projectDir, "rev-parse", "--short=8", "HEAD"), errMsg)
+      branchLastCommitHash = runCommand(listOf("git", "-C", projectDir, "rev-parse", "--short=8", "HEAD"), errMsg)
       buildId = "${branchName}/${branchLastCommitHash}"
     }
 
