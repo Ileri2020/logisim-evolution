@@ -134,8 +134,8 @@ public class PythonCircuitScriptRunner {
         appHome.getParent() != null && appHome.getParent().getParent() != null
             ? appHome.getParent().getParent().resolve("scripts/python")
             : null,
-        appHome.resolve("..\scripts/python"),
-        appHome.resolve("..\..\scripts/python")
+        appHome.resolve(Path.of("..", "scripts", "python")),
+        appHome.resolve(Path.of("..", "..", "scripts", "python"))
     );
 
     for (final var candidate : candidates) {

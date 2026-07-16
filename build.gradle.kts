@@ -403,15 +403,16 @@ tasks.register("createPackageInput") {
   val libsDir = ext.get(LIBS_DIR) as String
   val shadowJarFilename = ext.get(SHADOW_JAR_FILE_NAME) as String
   val packageInputDir = ext.get(PACKAGE_INPUT_DIR) as String
+  val pythonSourceDir = "${project.projectDir}/scripts/python"
+  val pythonDestDir = "${packageInputDir}/scripts/python"
 
   inputs.file("${libsDir}/${shadowJarFilename}")
+  inputs.dir(pythonSourceDir)
   outputs.dir(packageInputDir)
 
   doLast {
     func.deleteDirectoryContents(packageInputDir)
     func.copyFile("${libsDir}/${shadowJarFilename}", "${packageInputDir}/${shadowJarFilename}")
-    val pythonSourceDir = "${projectDir}/scripts/python"
-    val pythonDestDir = "${packageInputDir}/scripts/python"
     func.copyDirectory(pythonSourceDir, pythonDestDir)
   }
 }
