@@ -81,37 +81,93 @@ public class PythonConsolePanel extends JPanel {
   }
 
   private void runCurrentSnippet() {
-    SwingUtilities.invokeLater(() -> {
-      outputArea.append("\n>>> running snippet...\n");
+    SwingUtilities.invokeLater(this::runCurrentSnippetInternal);
+  }
+
+  public void runCurrentSnippetNow() {
+    if (SwingUtilities.isEventDispatchThread()) {
+      runCurrentSnippetInternal();
+    } else {
       try {
-        final var tempDir = Files.createTempDirectory("logisim-python-console");
-        final var scriptPath = tempDir.resolve("console_script.py");
-        Files.writeString(scriptPath, inputArea.getText(), StandardCharsets.UTF_8);
-
-        final var manager = PythonScriptManager.getInstance();
-        if (manager.isReady()) {
-          final var success = manager.runFile(scriptPath.toFile());
-          if (success) {
-            outputArea.append("\n[ok] embedded Python snippet executed\n");
-          } else {
-            outputArea.append("\n[error] embedded Python snippet execution failed\n");
-          }
-          return;
-        }
-
-        final var outputFile = tempDir.resolve("generated_blueprint.json").toFile();
-        final var runner = new PythonCircuitScriptRunner();
-        final var result = runner.runCode(inputArea.getText(), outputFile);
-        outputArea.append(result.output().isBlank() ? "" : result.output());
-        if (result.exitCode() == 0) {
-          outputArea.append("\n[ok] generated blueprint written to " + outputFile + "\n");
-        } else {
-          outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
-        }
+        SwingUtilities.invokeAndWait(this::runCurrentSnippetInternal);
       } catch (Exception ex) {
         outputArea.append("\n[error] " + ex.getMessage() + "\n");
       }
-    });
+    }
+  }
+
+  private void runCurrentSnippetInternal() {
+    outputArea.append("\n>>> running snippet...\n");
+    try {
+      final var selectedScript = resolvePath(scriptPathField.getText().trim());
+      if (selectedScript != null && selectedScript.toFile().isFile() && selectedScript.toString().endsWith(".py")) {
+        runScriptFile(selectedScript.toFile());
+        return;
+      }
+
+      final var tempDir = Files.createTempDirectory("logisim-python-console");
+      final var scriptPath = tempDir.resolve("console_script.py");
+      Files.writeString(scriptPath, inputArea.getText(), StandardCharsets.UTF_8);
+
+      final var manager = PythonScriptManager.getInstance();
+      if (manager.isReady()) {
+        final var success = manager.runFile(scriptPath.toFile());
+        if (success) {
+          outputArea.append("\n[ok] embedded Python snippet executed\n");
+        } else {
+          outputArea.append("\n[error] embedded Python snippet execution failed\n");
+        }
+        return;
+      }
+
+      if (PythonScriptManager.isForceEmbedded()) {
+        outputArea.append("\n[error] embedded Python runtime required but unavailable\n");
+        return;
+      }
+
+      final var outputFile = tempDir.resolve("generated_blueprint.json").toFile();
+      final var runner = new PythonCircuitScriptRunner();
+      final var result = runner.runCode(inputArea.getText(), outputFile);
+      outputArea.append(result.output().isBlank() ? "" : result.output());
+      if (result.exitCode() == 0) {
+        outputArea.append("\n[ok] generated blueprint written to " + outputFile + "\n");
+      } else {
+        outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
+      }
+    } catch (Exception ex) {
+      outputArea.append("\n[error] " + ex.getMessage() + "\n");
+    }
+  }
+
+  private void runScriptFile(File scriptFile) {
+    final var manager = PythonScriptManager.getInstance();
+    if (manager.isReady()) {
+      final var success = manager.runFile(scriptFile);
+      if (success) {
+        outputArea.append("\n[ok] embedded Python script executed: " + scriptFile + "\n");
+      } else {
+        outputArea.append("\n[error] embedded Python script execution failed: " + scriptFile + "\n");
+      }
+      return;
+    }
+
+    if (PythonScriptManager.isForceEmbedded()) {
+      outputArea.append("\n[error] embedded Python runtime required but unavailable\n");
+      return;
+    }
+
+    final var runner = new PythonCircuitScriptRunner();
+    try {
+      final var result = runner.runScriptAndCapture(scriptFile, null);
+      outputArea.append(result.output().isBlank() ? "" : result.output());
+      if (result.exitCode() == 0) {
+        outputArea.append("\n[ok] external Python script executed: " + scriptFile + "\n");
+      } else {
+        outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
+      }
+    } catch (Exception ex) {
+      outputArea.append("\n[error] " + ex.getMessage() + "\n");
+    }
   }
 
   public void setScriptPath(String scriptPath) {
@@ -142,6 +198,28 @@ public class PythonConsolePanel extends JPanel {
     if (text != null && !text.isBlank()) {
       outputArea.append(text);
     }
+  }
+
+  public void loadScriptFileAndRun(Path scriptPath) {
+    if (scriptPath == null) {
+      return;
+    }
+    final var resolvedPath = scriptPath.toAbsolutePath();
+    setScriptPath(resolvedPath.toString());
+    try {
+      inputArea.setText(Files.readString(resolvedPath, StandardCharsets.UTF_8));
+      outputArea.append("\n[script] loaded " + resolvedPath + "\n");
+    } catch (IOException ex) {
+      outputArea.append("\n[error] could not read script file: " + ex.getMessage() + "\n");
+    }
+  }
+
+  public String getOutputText() {
+    return outputArea.getText();
+  }
+
+  public String getInputText() {
+    return inputArea.getText();
   }
 
   private void chooseScriptFile() {
@@ -186,7 +264,7 @@ public class PythonConsolePanel extends JPanel {
       }
     }
 
-    final var examplesDir = resolveWorkspaceRoot().resolve("scripts/python/examples");
+    final var examplesDir = resolveExamplesDirectory();
     if (Files.isDirectory(examplesDir)) {
       return examplesDir.toFile();
     }
@@ -197,6 +275,41 @@ public class PythonConsolePanel extends JPanel {
     return Path.of(System.getProperty("user.dir"));
   }
 
+  private Path resolveAppHome() {
+    try {
+      final var codeSource = PythonConsolePanel.class.getProtectionDomain().getCodeSource();
+      if (codeSource != null && codeSource.getLocation() != null) {
+        final var jarPath = Path.of(codeSource.getLocation().toURI()).toAbsolutePath();
+        final var parentDir = jarPath.getParent();
+        if (parentDir != null) {
+          return parentDir;
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return resolveWorkspaceRoot();
+  }
+
+  private Path resolveExamplesDirectory() {
+    final var workspaceExamples = resolveWorkspaceRoot().resolve("scripts/python/examples");
+    if (Files.isDirectory(workspaceExamples)) {
+      return workspaceExamples;
+    }
+
+    final var appExamples = resolveAppHome().resolve("scripts/python/examples");
+    if (Files.isDirectory(appExamples)) {
+      return appExamples;
+    }
+
+    final var appHomeExamples = resolveAppHome().getParent() != null
+        ? resolveAppHome().getParent().resolve("scripts/python/examples")
+        : null;
+    if (appHomeExamples != null && Files.isDirectory(appHomeExamples)) {
+      return appHomeExamples;
+    }
+    return resolveWorkspaceRoot();
+  }
+
   private Path resolvePath(String pathText) {
     if (pathText == null || pathText.isBlank()) {
       return null;
@@ -205,17 +318,59 @@ public class PythonConsolePanel extends JPanel {
     if (path.isAbsolute()) {
       return path;
     }
-    return resolveWorkspaceRoot().resolve(path);
+
+    final var workspaceCandidate = resolveWorkspaceRoot().resolve(path);
+    if (Files.exists(workspaceCandidate)) {
+      return workspaceCandidate;
+    }
+
+    final var appHome = resolveAppHome();
+    final var appCandidate = appHome.resolve(path);
+    if (Files.exists(appCandidate)) {
+      return appCandidate;
+    }
+
+    final var appParent = appHome.getParent();
+    if (appParent != null) {
+      final var parentCandidate = appParent.resolve(path);
+      if (Files.exists(parentCandidate)) {
+        return parentCandidate;
+      }
+    }
+
+    return workspaceCandidate;
   }
 
   private String toDisplayPath(File file) {
-    final var workspaceRoot = resolveWorkspaceRoot();
+    final var absolute = file.toPath().toAbsolutePath();
     try {
-      final var relative = workspaceRoot.relativize(file.toPath().toAbsolutePath());
-      return relative.toString().replace('\\', '/');
+      final var workspaceRoot = resolveWorkspaceRoot();
+      final var relative = workspaceRoot.relativize(absolute);
+      if (!relative.toString().startsWith("..")) {
+        return relative.toString().replace('\\', '/');
+      }
     } catch (IllegalArgumentException ignored) {
-      return file.getAbsolutePath();
+      // ignore and try app-relative display
     }
+
+    try {
+      final var appHome = resolveAppHome();
+      final var relative = appHome.relativize(absolute);
+      if (!relative.toString().startsWith("..")) {
+        return relative.toString().replace('\\', '/');
+      }
+      final var appParent = appHome.getParent();
+      if (appParent != null) {
+        final var relativeToParent = appParent.relativize(absolute);
+        if (!relativeToParent.toString().startsWith("..")) {
+          return relativeToParent.toString().replace('\\', '/');
+        }
+      }
+    } catch (IllegalArgumentException ignored) {
+      // no-op
+    }
+
+    return absolute.toString();
   }
 
   private File resolveOutputFile() {

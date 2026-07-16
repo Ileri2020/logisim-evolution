@@ -46,6 +46,8 @@ public class PythonScriptManager implements AutoCloseable {
 
   private static final Logger logger = LoggerFactory.getLogger(PythonScriptManager.class);
   private static final String PYTHON = "python";
+  private static final boolean FORCE_EMBEDDED = Boolean.getBoolean("logisim.python.forceEmbedded")
+      || "true".equalsIgnoreCase(System.getenv("LOGISIM_PYTHON_FORCE_EMBEDDED"));
 
   /** Singleton instance. */
   private static PythonScriptManager instance;
@@ -108,12 +110,15 @@ public class PythonScriptManager implements AutoCloseable {
       initialized = true;
       logger.info("GraalPy Python scripting engine initialized successfully.");
     } catch (Throwable e) {
+      if (FORCE_EMBEDDED) {
+        logger.error("Embedded Python runtime required but unavailable.", e);
+        closeQuietly();
+        throw new IllegalStateException("Embedded Python runtime required but unavailable: " + e.getMessage(), e);
+      }
+
       logger.warn("Embedded Python runtime unavailable in this environment; scripting bindings will be disabled. {}", e.getMessage());
       initialized = false;
-      if (polyglotContext != null) {
-        polyglotContext.close();
-        polyglotContext = null;
-      }
+      closeQuietly();
       bindings = new LogisimPythonBindings(this);
     }
   }
@@ -265,6 +270,12 @@ public class PythonScriptManager implements AutoCloseable {
         }
       }
     }
+
+    final var currentDir = Path.of(System.getProperty("user.dir")).toAbsolutePath();
+    final var workspaceCandidate = currentDir.resolve("scripts/python");
+    if (Files.isDirectory(workspaceCandidate.resolve("logisim_py"))) {
+      return workspaceCandidate;
+    }
     return null;
   }
 
@@ -318,13 +329,24 @@ public class PythonScriptManager implements AutoCloseable {
    */
   @Override
   public synchronized void close() {
-    if (polyglotContext != null) {
-      logger.info("Closing embedded Python scripting engine.");
-      polyglotContext.close();
-      polyglotContext = null;
-    }
+    closeQuietly();
     initialized = false;
     instance = null;
+  }
+
+  private synchronized void closeQuietly() {
+    if (polyglotContext != null) {
+      logger.info("Closing embedded Python scripting engine.");
+      try {
+        polyglotContext.close();
+      } catch (Throwable ignored) {
+      }
+      polyglotContext = null;
+    }
+  }
+
+  public static boolean isForceEmbedded() {
+    return FORCE_EMBEDDED;
   }
 
   /**

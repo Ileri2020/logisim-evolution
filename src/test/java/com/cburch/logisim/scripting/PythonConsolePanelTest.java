@@ -20,7 +20,7 @@ class PythonConsolePanelTest {
             + "circuit = Circuit('demo')\n"
             + "circuit.add(Gate('and', 'and0'))\n"
             + "circuit.save_to('"
-            + outputPath
+            + outputPath.toString().replace("\\", "\\\\")
             + "')\n");
 
     final var panel = new PythonConsolePanel(null);

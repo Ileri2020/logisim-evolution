@@ -128,14 +128,18 @@ public class PythonCircuitScriptRunner {
     }
 
     final var appHome = getAppHome();
+    final var cwd = Path.of(System.getProperty("user.dir")).toAbsolutePath();
     final var candidates = List.of(
         appHome.resolve("scripts/python"),
         appHome.getParent() != null ? appHome.getParent().resolve("scripts/python") : null,
         appHome.getParent() != null && appHome.getParent().getParent() != null
             ? appHome.getParent().getParent().resolve("scripts/python")
             : null,
-        appHome.resolve(Path.of("..", "scripts", "python")),
-        appHome.resolve(Path.of("..", "..", "scripts", "python"))
+        appHome.resolve(Path.of("..", "scripts", "python")).normalize(),
+        appHome.resolve(Path.of("..", "..", "scripts", "python")).normalize(),
+        cwd.resolve("scripts/python"),
+        cwd.resolve(Path.of("..", "scripts", "python")).normalize(),
+        cwd.resolve(Path.of("..", "..", "scripts", "python")).normalize()
     );
 
     for (final var candidate : candidates) {

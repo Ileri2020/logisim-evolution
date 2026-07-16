@@ -707,6 +707,11 @@ public class Startup implements AWTEventListener {
       return RC.QUIT;
     }
 
+    if (PythonScriptManager.isForceEmbedded()) {
+      logger.error("Embedded Python runtime required but unavailable; aborting Python script execution.");
+      return RC.QUIT;
+    }
+
     // ── Fallback: external process runner (legacy behaviour) ───────────────────
     // Reached only if GraalPy failed to initialise (e.g., missing native libs).
     // Outputs a generated_blueprint.json file, same as before.

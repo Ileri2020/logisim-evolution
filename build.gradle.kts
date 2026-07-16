@@ -85,6 +85,7 @@ val TARGET_DIR = "targetDir"
 val TARGET_FILE_PATH_BASE = "targetFilePathBase"
 val TARGET_FILE_PATH_BASE_SHORT = "targetFilePathBaseShort"
 val UPPERCASE_PROJECT_NAME = "uppercaseProjectName"
+val GRAAL_RUNTIME_IMAGE = "graalRuntimeImage"
 
 java {
   sourceCompatibility = JavaVersion.VERSION_21
@@ -149,6 +150,14 @@ extra.apply {
   val baseFilenameShort = "${project.name}-${appVersionShort}"
   set(TARGET_FILE_PATH_BASE_SHORT, "${targetDir}/${baseFilenameShort}")
   logger.debug("targetFilePathBaseShort: \"${targetDir}/${baseFilenameShort}\"")
+
+  val graalRuntimeImage = findProperty("graalRuntimeImage") as String?
+  set(GRAAL_RUNTIME_IMAGE, graalRuntimeImage)
+  if (graalRuntimeImage != null) {
+    logger.info("GraalVM runtime image enabled for packaging: ${graalRuntimeImage}")
+  }
+  // When building installers or runtime images, use a GraalVM runtime image path
+  // to ensure embedded GraalPy native libraries are included for the packaged app.
 
   // Name of application shadowJar file.
   val shadowJarFilename = "${baseFilename}-all.jar"
@@ -531,7 +540,9 @@ tasks.register("createMsi") {
   }
 
   doLast {
-    val params = sharedParams + func.getNeededModules(jdepsFile) + listOf(
+    val graalRuntimeImage = ext.get(GRAAL_RUNTIME_IMAGE) as String?
+    val runtimeParams = if (graalRuntimeImage != null) listOf("--runtime-image", graalRuntimeImage) else emptyList()
+    val params = sharedParams + func.getNeededModules(jdepsFile) + runtimeParams + listOf(
         "--name", projectName,
         "--dest", targetDir,
         "--icon", "${supportDir}/windows/Logisim-evolution.ico",
@@ -587,7 +598,9 @@ tasks.register("createExe") {
 
   doLast {
     func.deleteDirectoryContents(dest)
-    val params = sharedParams + func.getNeededModules(jdepsFile) + listOf(
+    val graalRuntimeImage = ext.get(GRAAL_RUNTIME_IMAGE) as String?
+    val runtimeParams = if (graalRuntimeImage != null) listOf("--runtime-image", graalRuntimeImage) else emptyList()
+    val params = sharedParams + func.getNeededModules(jdepsFile) + runtimeParams + listOf(
         "--name", projectName,
         "--dest", dest,
         "--icon", "${supportDir}/windows/Logisim-evolution.ico",
@@ -658,7 +671,9 @@ tasks.register("createApp") {
 
   doLast {
     func.deleteDirectoryContents(dest)
-    val params = sharedParams + func.getNeededModules(jdepsFile) + listOf(
+    val graalRuntimeImage = ext.get(GRAAL_RUNTIME_IMAGE) as String?
+    val runtimeParams = if (graalRuntimeImage != null) listOf("--runtime-image", graalRuntimeImage) else emptyList()
+    val params = sharedParams + func.getNeededModules(jdepsFile) + runtimeParams + listOf(
         "--dest", dest,
         "--name", projectName,
         "--file-associations", "${supportDir}/macos/file.jpackage",
