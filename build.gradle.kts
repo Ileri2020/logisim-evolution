@@ -534,12 +534,10 @@ tasks.register("createMsi") {
     val params = sharedParams + func.getNeededModules(jdepsFile) + listOf(
         "--name", projectName,
         "--dest", targetDir,
-        "--file-associations", "${supportDir}/windows/file.jpackage",
         "--icon", "${supportDir}/windows/Logisim-evolution.ico",
         "--win-menu-group", projectName,
         "--win-shortcut",
         "--win-dir-chooser",
-        "--win-menu",
         "--type", "msi",
         // we MUST use short version form (without any suffix like "-dev", as it is not allowed in MSI package:
         // https://docs.microsoft.com/en-us/windows/win32/msi/productversion?redirectedfrom=MSDN

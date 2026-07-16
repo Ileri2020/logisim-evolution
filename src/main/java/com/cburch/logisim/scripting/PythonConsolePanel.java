@@ -87,12 +87,24 @@ public class PythonConsolePanel extends JPanel {
         final var tempDir = Files.createTempDirectory("logisim-python-console");
         final var scriptPath = tempDir.resolve("console_script.py");
         Files.writeString(scriptPath, inputArea.getText(), StandardCharsets.UTF_8);
-        final var outputFile = resolveOutputFile();
+
+        final var manager = PythonScriptManager.getInstance();
+        if (manager.isReady()) {
+          final var success = manager.runFile(scriptPath.toFile());
+          if (success) {
+            outputArea.append("\n[ok] embedded Python snippet executed\n");
+          } else {
+            outputArea.append("\n[error] embedded Python snippet execution failed\n");
+          }
+          return;
+        }
+
+        final var outputFile = tempDir.resolve("generated_blueprint.json").toFile();
         final var runner = new PythonCircuitScriptRunner();
         final var result = runner.runCode(inputArea.getText(), outputFile);
         outputArea.append(result.output().isBlank() ? "" : result.output());
         if (result.exitCode() == 0) {
-          outputArea.append("\n[ok] blueprint written to " + outputFile + "\n");
+          outputArea.append("\n[ok] generated blueprint written to " + outputFile + "\n");
         } else {
           outputArea.append("\n[error] exit code " + result.exitCode() + "\n");
         }

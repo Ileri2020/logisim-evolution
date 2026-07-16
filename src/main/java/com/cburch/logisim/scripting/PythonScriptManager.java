@@ -197,22 +197,7 @@ public class PythonScriptManager implements AutoCloseable {
 
       // Walk upwards from the script's location to find the scripts/python package root.
       // This is the directory that contains the logisim_py package folder.
-      Path searchDir = scriptFile.getParentFile().toPath().toAbsolutePath();
-      Path packageRoot = null;
-      while (searchDir != null) {
-        if (Files.isDirectory(searchDir.resolve("logisim_py"))) {
-          packageRoot = searchDir;
-          break;
-        }
-        // Also check if this dir contains scripts/python/logisim_py anywhere up the tree
-        final var candidate = searchDir.resolve("scripts").resolve("python");
-        if (Files.isDirectory(candidate.resolve("logisim_py"))) {
-          packageRoot = candidate;
-          break;
-        }
-        searchDir = searchDir.getParent();
-      }
-
+      Path packageRoot = resolvePythonPackageRoot(scriptFile.getParentFile().toPath().toAbsolutePath());
       if (packageRoot != null) {
         final var pkgPath = packageRoot.toString().replace("\\", "\\\\");
         eval("import sys; _pp='" + pkgPath + "'; (sys.path.insert(0,_pp) if _pp not in sys.path else None)");
@@ -250,6 +235,53 @@ public class PythonScriptManager implements AutoCloseable {
       System.setErr(originalErr);
       captureStream.close();
     }
+  }
+
+  private Path resolvePythonPackageRoot(Path searchDir) {
+    while (searchDir != null) {
+      if (Files.isDirectory(searchDir.resolve("logisim_py"))) {
+        return searchDir;
+      }
+      final var candidate = searchDir.resolve("scripts").resolve("python");
+      if (Files.isDirectory(candidate.resolve("logisim_py"))) {
+        return candidate;
+      }
+      searchDir = searchDir.getParent();
+    }
+
+    final var appHome = getAppHome();
+    if (appHome != null) {
+      final var candidates = List.of(
+          appHome.resolve("scripts/python"),
+          appHome.getParent() != null ? appHome.getParent().resolve("scripts/python") : null,
+          appHome.getParent() != null && appHome.getParent().getParent() != null
+              ? appHome.getParent().getParent().resolve("scripts/python")
+              : null
+      );
+      for (final var candidate : candidates) {
+        if (candidate != null && Files.isDirectory(candidate.resolve("logisim_py"))) {
+          return candidate;
+        }
+      }
+    }
+    return null;
+  }
+
+  private Path getAppHome() {
+    try {
+      final var codeSource = PythonScriptManager.class
+          .getProtectionDomain()
+          .getCodeSource();
+      if (codeSource != null && codeSource.getLocation() != null) {
+        final var jarPath = Path.of(codeSource.getLocation().toURI()).toAbsolutePath();
+        final var parentDir = jarPath.getParent();
+        if (parentDir != null) {
+          return parentDir;
+        }
+      }
+    } catch (Exception ignored) {
+    }
+    return Path.of(System.getProperty("user.dir"));
   }
 
   private void flushCapturedOutput(ByteArrayOutputStream outputBuffer) {
