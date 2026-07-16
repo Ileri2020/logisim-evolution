@@ -355,6 +355,115 @@ fun getNeededModules(fileName: String): List<String> {
   return listOf("--add-modules", dependencies)
 }
 
+fun createNeededJavaModulesAction(cmd: List<String>, outFileName: String): org.gradle.api.Action<Task> {
+  return org.gradle.api.Action {
+    val neededJavaModules = runCommand(cmd, "Error while finding Java dependencies with jdeps.").trim()
+    File(outFileName).writeText(neededJavaModules)
+    verifyFileExists(outFileName)
+  }
+}
+
+fun createPackageInputAction(sourceJarPath: String, shadowJarFilename: String, packageInputDir: String, pythonSourceDir: String, pythonDestDir: String): org.gradle.api.Action<Task> {
+  return org.gradle.api.Action {
+    deleteDirectoryContents(packageInputDir)
+    copyFile(sourceJarPath, "${packageInputDir}/${shadowJarFilename}")
+    copyDirectory(pythonSourceDir, pythonDestDir)
+  }
+}
+
+fun createMsiAction(
+  jpackage: String,
+  sharedParams: List<String>,
+  jdepsFile: String,
+  runtimeParams: List<String>,
+  projectName: String,
+  targetDir: String,
+  supportDir: String,
+  osArch: String,
+  version: String,
+  outputFile: String
+): org.gradle.api.Action<Task> {
+  return org.gradle.api.Action {
+    val params = sharedParams + getNeededModules(jdepsFile) + runtimeParams + listOf(
+      "--name", projectName,
+      "--dest", targetDir,
+      "--icon", "${supportDir}/windows/Logisim-evolution.ico",
+      "--win-menu-group", projectName,
+      "--win-shortcut",
+      "--win-dir-chooser",
+      "--type", "msi",
+      "--app-version", version,
+    )
+    runCommand(params, "Error while creating the MSI package.")
+    val fromFile = "${targetDir}/${projectName}-${version}.msi"
+    copyFile(fromFile, outputFile)
+    File(fromFile).delete()
+    verifyFileExists(outputFile)
+  }
+}
+
+fun genBuildInfoAction(buildInfoFilePath: String, projectDirPath: String, appVersion: String, projectName: String, displayName: String, url: String): org.gradle.api.Action<Task> {
+  return org.gradle.api.Action {
+    val now = Date()
+    val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(now)
+
+    var branchName = ""
+    var branchLastCommitHash = ""
+    var buildId = "(Not built from Git repo)"
+    if (File("${projectDirPath}/.git").exists()) {
+      branchName = runCommand(listOf("git", "-C", projectDirPath, "rev-parse", "--abbrev-ref", "HEAD"), "Failed getting branch name.")
+      branchLastCommitHash = runCommand(listOf("git", "-C", projectDirPath, "rev-parse", "--short=8", "HEAD"), "Failed getting last commit hash.")
+      buildId = "${branchName}/${branchLastCommitHash}"
+    }
+
+    val currentMillis = now.time
+    val buildYear = SimpleDateFormat("yyyy").format(now)
+    val buildInfoClass = """
+        // ************************************************************************
+        // THIS IS A COMPILE TIME GENERATED FILE! DO NOT EDIT BY HAND!
+        // Generated at ${nowIso}
+        // ************************************************************************
+
+        package com.cburch.logisim.generated;
+
+        import com.cburch.logisim.LogisimVersion;
+        import java.util.Date;
+
+        public final class BuildInfo {
+          // Build time VCS details
+          public static final String branchName = "${branchName}";
+          public static final String branchLastCommitHash = "${branchLastCommitHash}";
+          public static final String buildId = "${buildId}";
+
+          // Project build timestamp
+          public static final long millis = ${currentMillis}L; // keep trailing 'L'
+          public static final String year = "${buildYear}";
+          public static final String dateIso8601 = "${nowIso}";
+          public static final Date date = new Date();
+          static { date.setTime(millis); }
+
+          // Project version
+          public static final LogisimVersion version = LogisimVersion.fromString("${appVersion}");
+          public static final String name = "${projectName}";
+          public static final String displayName = "${displayName}";
+          public static final String url = "${url}";
+
+          // JRE info
+          public static final String jvm_version =
+              String.format("%s v%s", System.getProperty("java.vm.name"), System.getProperty("java.version"));
+          public static final String jvm_vendor = System.getProperty("java.vendor");
+        }
+        // End of generated BuildInfo
+
+        """
+
+    logger.info("Generating: ${buildInfoFilePath}")
+    val buildInfoFile = File(buildInfoFilePath)
+    buildInfoFile.parentFile.mkdirs()
+    buildInfoFile.writeText(buildInfoClass.trimIndent())
+  }
+}
+
 /**
  *  Patches the start‑scripts of Windows
  */
@@ -388,11 +497,7 @@ tasks.register("createNeededJavaModules") {
   inputs.file(jarFileName)
   outputs.file(outFileName)
 
-  doLast {
-    val neededJavaModules = runCommand(cmd, "Error while finding Java dependencies with jdeps.").trim()
-    File(outFileName).writeText(neededJavaModules)
-    verifyFileExists(outFileName)
-  }
+  doLast(createNeededJavaModulesAction(cmd, outFileName))
 }
 
 /**
@@ -416,11 +521,7 @@ tasks.register("createPackageInput") {
   inputs.dir(pythonSourceDir)
   outputs.dir(packageInputDir)
 
-  doLast {
-    deleteDirectoryContents(packageInputDir)
-    copyFile("${libsDir}/${shadowJarFilename}", "${packageInputDir}/${shadowJarFilename}")
-    copyDirectory(pythonSourceDir, pythonDestDir)
-  }
+  doLast(createPackageInputAction("${libsDir}/${shadowJarFilename}", shadowJarFilename, packageInputDir, pythonSourceDir, pythonDestDir))
 }
 
 /**
@@ -777,67 +878,7 @@ tasks.register("genBuildInfo") {
   val displayName = "${projectName} v${appVersion}"
   val url = ext.get(APP_URL) as String
 
-  doLast {
-    val now = Date()
-    val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(now)
-
-    var branchName = ""
-    var branchLastCommitHash = "";
-    var buildId = "(Not built from Git repo)";
-    if (File("${projectDir}/.git").exists()) {
-      var errMsg = "Failed getting branch name."
-      branchName = runCommand(listOf("git", "-C", projectDir, "rev-parse", "--abbrev-ref", "HEAD"), errMsg)
-      errMsg = "Failed getting last commit hash."
-      branchLastCommitHash = runCommand(listOf("git", "-C", projectDir, "rev-parse", "--short=8", "HEAD"), errMsg)
-      buildId = "${branchName}/${branchLastCommitHash}"
-    }
-
-    val currentMillis = Date().time
-    val buildYear = SimpleDateFormat("yyyy").format(now)
-    val buildInfoClass = """
-        // ************************************************************************
-        // THIS IS A COMPILE TIME GENERATED FILE! DO NOT EDIT BY HAND!
-        // Generated at ${nowIso}
-        // ************************************************************************
-
-        package com.cburch.logisim.generated;
-
-        import com.cburch.logisim.LogisimVersion;
-        import java.util.Date;
-
-        public final class BuildInfo {
-          // Build time VCS details
-          public static final String branchName = "${branchName}";
-          public static final String branchLastCommitHash = "${branchLastCommitHash}";
-          public static final String buildId = "${buildId}";
-
-          // Project build timestamp
-          public static final long millis = ${currentMillis}L; // keep trailing 'L'
-          public static final String year = "${buildYear}";
-          public static final String dateIso8601 = "${nowIso}";
-          public static final Date date = new Date();
-          static { date.setTime(millis); }
-
-          // Project version
-          public static final LogisimVersion version = LogisimVersion.fromString("${appVersion}");
-          public static final String name = "${projectName}";
-          public static final String displayName = "${displayName}";
-          public static final String url = "${url}";
-
-          // JRE info
-          public static final String jvm_version =
-              String.format("%s v%s", System.getProperty("java.vm.name"), System.getProperty("java.version"));
-          public static final String jvm_vendor = System.getProperty("java.vendor");
-        }
-        // End of generated BuildInfo
-
-        """
-
-    logger.info("Generating: ${buildInfoFilePath}")
-    val buildInfoFile = File(buildInfoFilePath)
-    buildInfoFile.parentFile.mkdirs()
-    buildInfoFile.writeText(buildInfoClass.trimIndent())
-  }
+  doLast(genBuildInfoAction(buildInfoFilePath, projectDir, appVersion, projectName, displayName, url))
 }
 
 /**
