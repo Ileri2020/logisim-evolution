@@ -7,7 +7,7 @@ This folder contains a lightweight Python API for describing circuits in a Blend
 - `examples/` - Example scripts that create simple circuits.
 - `run_example.py` - Convenience script for generating a blueprint through the local Python runtime.
 
-## Quick start
+## Quick start--
 
 ```powershell
 python scripts/python/run_example.py --name demo --output scripts/python/generated_blueprint.json

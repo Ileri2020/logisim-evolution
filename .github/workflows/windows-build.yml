@@ -20,11 +20,28 @@ jobs:
       - name: "Checkout sources"
         uses: actions/checkout@v7
 
-      - name: Set up JDK ${{ env.JDK_VERSION }} ${{ env.JDK_DISTRO }}
+      - name: Set up JDK ${{ env.JDK_VERSION }} ${{ env.JDK_DISTRO }}  
         uses: actions/setup-java@v5
         with:
           java-version: ${{ env.JDK_VERSION }}
           distribution: ${{ env.JDK_DISTRO }}
+
+      - name: Install WiX Toolset
+        shell: pwsh
+        run: |
+          choco install wixtoolset -y --no-progress
+
+          $wixRoot = Join-Path ${env:ProgramFiles(x86)} 'WiX Toolset'
+          if (Test-Path $wixRoot) {
+            $versionDirs = Get-ChildItem -Path $wixRoot -Directory | Sort-Object Name -Descending
+            foreach ($dir in $versionDirs) {
+              $binDir = Join-Path $dir.FullName 'bin'
+              if (Test-Path $binDir) {
+                Add-Content -Path $env:GITHUB_PATH -Value $binDir
+                break
+              }
+            }
+          }
 
       - name: Verify JDK and jpackage
         shell: pwsh
